@@ -1435,11 +1435,7 @@ void new_protocol_stop() {
     close (data_socket);
 }
 
-//
-// This is the function called by the "Restart" button
-// in the new menu if P2 is running
-//
-void new_protocol_restart() {
+void new_protocol_menu_stop() {
   fd_set fds;
   struct timeval tv;
   char *buffer;
@@ -1468,6 +1464,9 @@ void new_protocol_restart() {
     recvfrom(data_socket,buffer,NET_BUFFER_SIZE,0,(struct sockaddr*)&addr,&length);
   }
   free(buffer);
+}
+
+void new_protocol_menu_start() {
   //
   // reset sequence numbers, action table, etc.
   //
@@ -1496,6 +1495,14 @@ void new_protocol_restart() {
   new_protocol_high_priority();
 }
 
+//
+// This is the function called by the "Restart" button
+// in the new menu if P2 is running
+//
+void new_protocol_restart() {
+  new_protocol_menu_stop();
+  new_protocol_menu_start();
+}
 static gpointer new_protocol_thread(gpointer data) {
 
     int ddc;

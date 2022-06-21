@@ -22,7 +22,7 @@
 
 #include "mode.h"
 
-#define FILTERS 12
+#define FILTERS 14
 
 #define CW_PITCH 600
 
@@ -46,6 +46,8 @@ typedef struct _FILTER FILTER;
 #define filterF9 9
 #define filterVar1 10
 #define filterVar2 11
+#define filterVarDef1 12
+#define filterVarDef2 13
 
 extern int filter;
 
@@ -63,4 +65,5 @@ extern void filterSaveState(void);
 extern void filterRestoreState(void);
 extern void filter_width_changed(int rx,int increment);
 extern void filter_shift_changed(int rx,int increment);
+extern void filter_cut_changed(int rx, int action, int increment);
 #endif

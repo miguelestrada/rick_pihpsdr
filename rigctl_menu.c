@@ -39,10 +39,18 @@ int serial_baud_rate = B9600;
 int serial_parity = 0; // 0=none, 1=even, 2=odd
 gboolean rigctl_debug=FALSE;
 
+int  andromeda_fp_serial_enable;
+static GtkWidget *andromeda_fp_enable_serial_b;
+char andromeda_fp_serial_port[64]="/dev/ttyACM1";
+char andromeda_fp_version[64]="initializing...";
+int andromeda_fp_baud_rate = B9600;
+int andromeda_fp_serial_parity = 0;
 static GtkWidget *parent_window=NULL;
 static GtkWidget *menu_b=NULL;
 static GtkWidget *dialog=NULL;
 static GtkWidget *serial_port_entry;
+static GtkWidget *andromeda_serial_port_entry;
+static GtkWidget *andromeda_version_entry;
 
 static void cleanup() {
   if(dialog!=NULL) {
@@ -90,6 +98,11 @@ static void rigctl_enable_cb(GtkWidget *widget, gpointer data) {
      }
      serial_enable=0;
      gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON(serial_enable_b),0);
+     if (andromeda_fp_serial_enable) {
+       disable_andromeda_fp_serial();
+     }
+     andromeda_fp_serial_enable=0;
+     gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON(andromeda_fp_enable_serial_b),0);
      disable_rigctl();
   }
 }
@@ -114,6 +127,25 @@ static void serial_enable_cb(GtkWidget *widget, gpointer data) {
   }
 }
 
+static void andromeda_fp_serial_enable_cb(GtkWidget *widget, gpointer data) {
+  //
+  // If rigctl is not running, andromeda_fp cannot be enabled
+  //
+  if (!rigctl_enable) {
+    andromeda_fp_serial_enable=0;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),0);
+    return;
+  }
+  strcpy(andromeda_fp_serial_port,gtk_entry_get_text(GTK_ENTRY(andromeda_serial_port_entry)));
+  andromeda_fp_serial_enable=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+  if(andromeda_fp_serial_enable) {
+     if(launch_andromeda_fp_serial() == 0) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),FALSE)	     ;
+     }	      
+  } else {
+     disable_andromeda_fp_serial();
+  }
+}
 // Set Baud Rate
 static void baud_rate_cb(GtkWidget *widget, gpointer data) {
    int active=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
@@ -237,6 +269,29 @@ void rigctl_menu(GtkWidget *parent) {
   gtk_widget_show(baud_rate_b38400);
   gtk_grid_attach(GTK_GRID(grid),baud_rate_b38400,4,5,1,1);
   g_signal_connect(baud_rate_b38400,"toggled",G_CALLBACK(baud_rate_cb),(gpointer *) B38400);
+  andromeda_fp_enable_serial_b=gtk_check_button_new_with_label("Andromeda FP Serial Enable");
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (andromeda_fp_enable_serial_b), andromeda_fp_serial_enable);
+  gtk_widget_show(andromeda_fp_enable_serial_b);
+  gtk_grid_attach(GTK_GRID(grid),andromeda_fp_enable_serial_b,0,6,1,1);
+  g_signal_connect(andromeda_fp_enable_serial_b,"toggled",G_CALLBACK(andromeda_fp_serial_enable_cb),NULL);
+
+  GtkWidget *andromeda_serial_text_label=gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(andromeda_serial_text_label), "<b>Andromeda FP Serial Port: </b>");
+  gtk_grid_attach(GTK_GRID(grid),andromeda_serial_text_label,0,7,1,1);
+
+  andromeda_serial_port_entry=gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(andromeda_serial_port_entry),andromeda_fp_serial_port);
+  gtk_widget_show(andromeda_serial_port_entry);
+  gtk_grid_attach(GTK_GRID(grid),andromeda_serial_port_entry,1,7,2,1);
+
+  GtkWidget *andromeda_version_text_label=gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(andromeda_version_text_label), "<b>Andromeda FP Version: </b>");
+  gtk_grid_attach(GTK_GRID(grid),andromeda_version_text_label,0,8,1,1);
+
+  andromeda_version_entry=gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(andromeda_version_entry),andromeda_fp_version);
+  gtk_widget_show(andromeda_version_entry);
+  gtk_grid_attach(GTK_GRID(grid),andromeda_version_entry,1,8,2,1);
 
 /*
   // Serial parity

@@ -23,11 +23,16 @@
 
 extern void rigctl_menu(GtkWidget *parent);
 extern char ser_port[];
+extern char andromeda_fp_serial_port[];
+extern char andromeda_fp_version[];
 extern void disable_rigctl(void);
 extern void disable_serial(void);
 
 extern int serial_baud_rate;
+extern int andromeda_fp_baud_rate;
 extern int serial_parity;
+extern int andromeda_fp_serial_parity;
 extern int serial_enable;
+extern int andromeda_fp_serial_enable;
 
 extern gboolean rigctl_debug;

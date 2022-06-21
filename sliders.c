@@ -82,6 +82,8 @@ static GtkWidget *comp_label;
 static GtkWidget *comp_scale;
 static GtkWidget *comp_enable;
 static GtkWidget *dummy_label;
+static GtkWidget *filter_cut_low_scale;
+static GtkWidget *filter_cut_high_scale;
 static GtkWidget *filter_width_scale;
 static GtkWidget *filter_shift_scale;
 static GtkWidget *diversity_gain_scale;
@@ -290,7 +292,7 @@ void set_agc_gain(int rx,double value) {
   receiver[rx]->agc_gain=value;
   set_agc(receiver[rx], receiver[rx]->agc);
   if(display_sliders) {
-    gtk_range_set_value (GTK_RANGE(agc_scale),receiver[rx]->agc_gain);
+    if (rx==active_receiver->id) gtk_range_set_value (GTK_RANGE(agc_scale),receiver[rx]->agc_gain);
   } else {
     if(scale_status!=AGC_GAIN || scale_rx!=rx) {
       if(scale_status!=NO_ACTION) {
@@ -349,7 +351,7 @@ void set_af_gain(int rx,double value) {
   receiver[rx]->volume=value;
   SetRXAPanelGain1 (receiver[rx]->id, receiver[rx]->volume);
   if(display_sliders) {
-    gtk_range_set_value (GTK_RANGE(af_gain_scale),receiver[rx]->volume*100.0);
+    if(active_receiver->id==rx) gtk_range_set_value (GTK_RANGE(af_gain_scale),receiver[rx]->volume*100.0);
   } else {
     if(scale_status!=AF_GAIN || scale_rx!=rx) {
       if(scale_status!=NO_ACTION) {
@@ -640,6 +642,66 @@ int update_drive(void *data) {
   set_drive(*(double *)data);
   free(data);
   return 0;
+}
+
+void set_filter_cut_high(int rx,int var) {
+  //g_print("%s var=%d\n",__FUNCTION__,var);
+    if(scale_status!=FILTER_CUT_HIGH || scale_rx!=rx) {
+      if(scale_status!=NO_ACTION) {
+        g_source_remove(scale_timer);
+        gtk_widget_destroy(scale_dialog);
+        scale_status=NO_ACTION;
+      }
+    }
+    if(scale_status==NO_ACTION) {
+      scale_status=FILTER_CUT_HIGH;
+      scale_rx=rx;
+      char title[64];
+      sprintf(title,"Filter Cut High RX %d (Hz)",rx);
+      scale_dialog=gtk_dialog_new_with_buttons(title,GTK_WINDOW(top_window),GTK_DIALOG_DESTROY_WITH_PARENT,NULL,NULL);
+      GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(scale_dialog));
+      filter_cut_high_scale=gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,-3300.0, 3300.0, 1.00);
+      gtk_widget_set_size_request (filter_cut_high_scale, 400, 30);
+      gtk_range_set_value (GTK_RANGE(filter_cut_high_scale),(double)var);
+      gtk_widget_show(filter_cut_high_scale);
+      gtk_container_add(GTK_CONTAINER(content),filter_cut_high_scale);
+      scale_timer=g_timeout_add(2000,scale_timeout_cb,NULL);
+      gtk_dialog_run(GTK_DIALOG(scale_dialog));
+    } else {
+      g_source_remove(scale_timer);
+      gtk_range_set_value (GTK_RANGE(filter_cut_high_scale),(double)var);
+      scale_timer=g_timeout_add(2000,scale_timeout_cb,NULL);
+    }
+}
+
+void set_filter_cut_low(int rx,int var) {
+  //g_print("%s var=%d\n",__FUNCTION__,var);
+    if(scale_status!=FILTER_CUT_LOW || scale_rx!=rx) {
+      if(scale_status!=NO_ACTION) {
+        g_source_remove(scale_timer);
+        gtk_widget_destroy(scale_dialog);
+        scale_status=NO_ACTION;
+      }
+    }
+    if(scale_status==NO_ACTION) {
+      scale_status=FILTER_CUT_LOW;
+      scale_rx=rx;
+      char title[64];
+      sprintf(title,"Filter Cut Low RX %d (Hz)",rx);
+      scale_dialog=gtk_dialog_new_with_buttons(title,GTK_WINDOW(top_window),GTK_DIALOG_DESTROY_WITH_PARENT,NULL,NULL);
+      GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(scale_dialog));
+      filter_cut_low_scale=gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,-3300.0, 3300.0, 1.00);
+      gtk_widget_set_size_request (filter_cut_low_scale, 400, 30);
+      gtk_range_set_value (GTK_RANGE(filter_cut_low_scale),(double)var);
+      gtk_widget_show(filter_cut_low_scale);
+      gtk_container_add(GTK_CONTAINER(content),filter_cut_low_scale);
+      scale_timer=g_timeout_add(2000,scale_timeout_cb,NULL);
+      gtk_dialog_run(GTK_DIALOG(scale_dialog));
+    } else {
+      g_source_remove(scale_timer);
+      gtk_range_set_value (GTK_RANGE(filter_cut_low_scale),(double)var);
+      scale_timer=g_timeout_add(2000,scale_timeout_cb,NULL);
+    }
 }
 
 static void squelch_value_changed_cb(GtkWidget *widget, gpointer data) {

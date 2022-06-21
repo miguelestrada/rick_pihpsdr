@@ -22,6 +22,7 @@
 
 #include "sliders.h"
 #include "filter.h"
+#include "actions.h"
 #include "receiver.h"
 #include "vfo.h"
 #include "radio.h"
@@ -39,7 +40,9 @@ FILTER filterLSB[FILTERS]={
     {-1950,-150,"1.8k"},
     {-1150,-150,"1.0k"},
     {-2850,-150,"Var1"},
-    {-2850,-150,"Var2"}
+    {-2850,-150,"Var2"},
+    {-2850,-150,"VarDef1"},
+    {-2850,-150,"VarDef2"}
     };
 
 //
@@ -59,7 +62,9 @@ FILTER filterDIGL[FILTERS]={
     {-1750,-1250,"500"},
     {-1625,-1375,"250"},
     {-3000,    0,"Var1"},
-    {-2000,-1000,"Var2"}
+    {-2000,-1000,"Var2"},
+    {-3000,    0,"VarDef1"},
+    {-2000,-1000,"VarDef2"}
     };
 
 FILTER filterUSB[FILTERS]={
@@ -74,7 +79,9 @@ FILTER filterUSB[FILTERS]={
     {150,1950,"1.8k"},
     {150,1150,"1.0k"},
     {150,2850,"Var1"},
-    {150,2850,"Var2"}
+    {150,2850,"Var2"},
+    {150,2850,"VarDef1"},
+    {150,2850,"VarDef2"}
     };
 
 FILTER filterDIGU[FILTERS]={
@@ -89,7 +96,9 @@ FILTER filterDIGU[FILTERS]={
     {1250,1750,"500"},
     {1375,1625,"250"},
     {   0,3000,"Var1"},
-    {1000,2000,"Var2"}
+    {1000,2000,"Var2"},
+    {   0,3000,"VarDef1"},
+    {1000,2000,"VarDef2"}
     };
 
 FILTER filterCWL[FILTERS]={
@@ -104,7 +113,9 @@ FILTER filterCWL[FILTERS]={
     {25,25,"50"},
     {13,13,"25"},
     {250,250,"Var1"},
-    {250,250,"Var2"}
+    {250,250,"Var2"},
+    {250,250,"VarDef1"},
+    {250,250,"VarDef2"}
     };
 
 FILTER filterCWU[FILTERS]={
@@ -119,7 +130,9 @@ FILTER filterCWU[FILTERS]={
     {25,25,"50"},
     {13,13,"25"},
     {250,250,"Var1"},
-    {250,250,"Var2"}
+    {250,250,"Var2"},
+    {250,250,"VarDef1"},
+    {250,250,"VarDef2"}
     };
 
 FILTER filterAM[FILTERS]={
@@ -134,7 +147,9 @@ FILTER filterAM[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER filterSAM[FILTERS]={
@@ -149,7 +164,9 @@ FILTER filterSAM[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER filterFMN[FILTERS]={
@@ -164,7 +181,9 @@ FILTER filterFMN[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER filterDSB[FILTERS]={
@@ -179,7 +198,9 @@ FILTER filterDSB[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER filterSPEC[FILTERS]={
@@ -194,7 +215,9 @@ FILTER filterSPEC[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER filterDRM[FILTERS]={
@@ -209,7 +232,9 @@ FILTER filterDRM[FILTERS]={
     {-1450,1450,"2.9k"},
     {-1200,1200,"2.4k"},
     {-3300,3300,"Var1"},
-    {-3300,3300,"Var2"}
+    {-3300,3300,"Var2"},
+    {-3300,3300,"VarDef1"},
+    {-3300,3300,"VarDef2"}
     };
 
 FILTER *filters[]={
@@ -418,6 +443,31 @@ void filterRestoreState() {
     value=getProperty("filter.dsb.var2.high");
     if(value) filterDSB[filterVar2].high=atoi(value);
 
+}
+
+void filter_cut_changed(int rx, int action, int increment) {
+  int id=receiver[rx]->id;
+  FILTER *mode_filters=filters[vfo[id].mode];
+  FILTER *filter=&mode_filters[vfo[id].filter];
+
+//fprintf(stderr,"filter_cut_changed: rx=%d action=%d, mode=%d filter=%d increment=%d\n",rx,action,vfo[id].mode,vfo[id].filter,increment);
+
+  if(vfo[id].filter==filterVar1 || vfo[id].filter==filterVar2) {
+
+    switch(action) {
+      case FILTER_CUT_HIGH:
+        filter->high=filter->high-(increment*filter_step);
+        set_filter_cut_high(id,filter->high);
+        break;
+      case FILTER_CUT_LOW:
+        filter->low=filter->low-(increment*filter_step);
+        set_filter_cut_low(id,filter->low);
+        break;
+      default:
+        break;
+    }
+    vfo_filter_changed(vfo[id].filter);
+  }
 }
 
 void filter_width_changed(int rx,int increment) {

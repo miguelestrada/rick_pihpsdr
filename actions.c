@@ -92,6 +92,9 @@ ACTION_TABLE ActionTable[] = {
   {DUPLEX,		"DUPLEX",		"DUP",		MIDI_KEY | CONTROLLER_SWITCH},
   {FILTER_MINUS,	"FILTER -",		"FL-",		MIDI_KEY | CONTROLLER_SWITCH},
   {FILTER_PLUS,		"FILTER +",		"FL+",		MIDI_KEY | CONTROLLER_SWITCH},
+  {FILTER_CUT_LOW,	"FILTER CUT\nLOW",	NULL,		MIDI_KNOB | MIDI_WHEEL | CONTROLLER_ENCODER},
+  {FILTER_CUT_HIGH,	"FILTER CUT\nHIGH",	NULL,		MIDI_KNOB | MIDI_WHEEL | CONTROLLER_ENCODER},
+  {FILTER_CUT_DEFAULT,	"FILTER CUT\nDEFAULT",	NULL,		MIDI_KEY | CONTROLLER_SWITCH},
   {FUNCTION,		"FUNC",			"FUNC",		CONTROLLER_SWITCH},
   {IF_SHIFT,		"IF SHIFT",		NULL,		MIDI_WHEEL | CONTROLLER_ENCODER},
   {IF_SHIFT_RX1,	"IF SHIFT\nRX1",	NULL,		MIDI_WHEEL | CONTROLLER_ENCODER},
@@ -626,14 +629,36 @@ int process_action(void *data) {
     case FILTER_MINUS:
       if(a->mode==PRESSED) {
         int f=vfo[active_receiver->id].filter+1;
-        if(f>=FILTERS) f=0;
+        if(f>=FILTERS-2) f=0;
         vfo_filter_changed(f);
       }
       break;
     case FILTER_PLUS:
       if(a->mode==PRESSED) {
         int f=vfo[active_receiver->id].filter-1;
-        if(f<0) f=FILTERS-1;
+        if(f<0) f=filterVar1;
+        vfo_filter_changed(f);
+      }
+      break;
+    case FILTER_CUT_HIGH:
+      {
+        filter_cut_changed(active_receiver->id, FILTER_CUT_HIGH, a->val);
+      }
+      break;
+    case FILTER_CUT_LOW:
+      {
+        filter_cut_changed(active_receiver->id, FILTER_CUT_LOW, a->val);
+      }
+      break;
+    case FILTER_CUT_DEFAULT:
+      if(a->mode==PRESSED) {
+        int id=active_receiver->id;
+        int f=vfo[id].filter;
+        if(f==filterVar1 || f==filterVar2) {
+          FILTER *mode_filters=filters[vfo[id].mode];
+          mode_filters[f].low=mode_filters[f+2].low;
+          mode_filters[f].high=mode_filters[f+2].high;
+        }
         vfo_filter_changed(f);
       }
       break;

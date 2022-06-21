@@ -544,14 +544,14 @@ int ext_xit_clear(void *data) {
 
 int ext_filter_plus(void *data) {
   int f=vfo[active_receiver->id].filter-1;
-  if(f<0) f=FILTERS-1;
+  if(f<0) f=filterVar1;
   vfo_filter_changed(f);
   return 0;
 }
 
 int ext_filter_minus(void *data) {
   int f=vfo[active_receiver->id].filter+1;
-  if(f>=FILTERS) f=0;
+  if(f>=FILTERS-2) f=0;
   vfo_filter_changed(f);
   return 0;
 }

@@ -96,4 +96,6 @@ extern void new_protocol_flush_iq_samples(void);
 extern void new_protocol_cw_audio_samples(short l, short r);
 
 extern void new_protocol_restart(void);
+extern void new_protocol_menu_stop(void);
+extern void new_protocol_menu_start(void);
 #endif

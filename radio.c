@@ -1325,10 +1325,14 @@ void start_radio() {
     if (serial_enable) {
       launch_serial();
     }
+    if (andromeda_fp_serial_enable) {
+      launch_andromeda_fp_serial();
+    }
   } else {
     // since we do not spawn the serial thread,
     // disable serial
     serial_enable=0;
+    andromeda_fp_serial_enable=0;
   }
 
   if(can_transmit) {
@@ -2286,6 +2290,10 @@ g_print("radioRestoreState: %s\n",property_path);
     if (value) serial_baud_rate=atoi(value);
     value=getProperty("rigctl_serial_port");
     if (value) strcpy(ser_port,value);
+    value=getProperty("rigctl_andromeda_fp_serial_enable");
+    if (value) andromeda_fp_serial_enable=atoi(value);
+    value=getProperty("rigctl_andromeda_fp_serial_port");
+    if (value) strcpy(andromeda_fp_serial_port,value);
 
     /*
     value=getProperty("adc_0_attenuation");
@@ -2748,6 +2756,9 @@ g_print("radioSaveState: %s\n",property_path);
     sprintf(value,"%d",serial_baud_rate);
     setProperty("rigctl_serial_baud_rate",value);
     setProperty("rigctl_serial_port",ser_port);
+    sprintf(value,"%d",andromeda_fp_serial_enable);
+    setProperty("rigctl_andromeda_fp_serial_enable",value);
+    setProperty("rigctl_andromeda_fp_serial_port",andromeda_fp_serial_port);
 
     sprintf(value,"%d",display_sequence_errors);
     setProperty("radio.display_sequence_errors",value);

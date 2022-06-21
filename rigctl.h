@@ -3,7 +3,9 @@
 
 void launch_rigctl (void);
 int launch_serial (void);
-void disable_sreial (void);
+void disable_serial (void);
+int launch_andromeda_fp_serial (void);
+void disable_andromeda_fp_serial (void);
 
 void  close_rigctl_ports (void);
 int   rigctlGetMode(void);

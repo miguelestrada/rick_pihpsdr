@@ -22,6 +22,9 @@ PURESIGNAL_INCLUDE=PURESIGNAL
 # uncomment the line below to include MIDI support
 MIDI_INCLUDE=MIDI
 
+# uncomment the line below to include ANDROMEDA support
+ANDROMEDA_INCLUDE=ANDROMEDA
+
 # uncomment the line below to include USB Ozy support
 # USBOZY_INCLUDE=USBOZY
 
@@ -67,6 +70,10 @@ MIDI_SOURCES= alsa_midi.c midi2.c midi3.c midi_menu.c
 MIDI_OBJS= alsa_midi.o midi2.o midi3.o midi_menu.o
 MIDI_LIBS= -lasound
 endif
+endif
+
+ifeq ($(ANDROMEDA_INCLUDE),ANDROMEDA)
+MIDI_OPTIONS=-D ANDROMEDA
 endif
 
 ifeq ($(PURESIGNAL_INCLUDE),PURESIGNAL)
@@ -215,7 +222,7 @@ AUDIO_SOURCES=portaudio.c
 AUDIO_OBJS=portaudio.o
 endif
 
-OPTIONS=$(SMALL_SCREEN_OPTIONS) $(MIDI_OPTIONS) $(PURESIGNAL_OPTIONS) $(REMOTE_OPTIONS) $(USBOZY_OPTIONS) \
+OPTIONS=$(SMALL_SCREEN_OPTIONS) $(MIDI_OPTIONS) $(ANDROMEDA_OPTIONS) $(PURESIGNAL_OPTIONS) $(REMOTE_OPTIONS) $(USBOZY_OPTIONS) \
 	$(GPIO_OPTIONS) $(SOAPYSDR_OPTIONS) $(LOCALCW_OPTIONS) \
 	$(STEMLAB_OPTIONS) \
 	$(SERVER_OPTIONS) \

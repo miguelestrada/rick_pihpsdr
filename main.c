@@ -20,8 +20,13 @@
 // Define maximum window size. 
 // Standard values 800 and 480: suitable for RaspberryBi 7-inch screen
 
+#ifdef ANDROMEDA
+#define MAX_DISPLAY_WIDTH  1200
+#define MAX_DISPLAY_HEIGHT 600
+#else
 #define MAX_DISPLAY_WIDTH  800
 #define MAX_DISPLAY_HEIGHT 480
+#endif
 
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>

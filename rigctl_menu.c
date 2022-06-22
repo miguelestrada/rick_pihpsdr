@@ -269,6 +269,8 @@ void rigctl_menu(GtkWidget *parent) {
   gtk_widget_show(baud_rate_b38400);
   gtk_grid_attach(GTK_GRID(grid),baud_rate_b38400,4,5,1,1);
   g_signal_connect(baud_rate_b38400,"toggled",G_CALLBACK(baud_rate_cb),(gpointer *) B38400);
+
+#ifdef ANDROMEDA
   andromeda_fp_enable_serial_b=gtk_check_button_new_with_label("Andromeda FP Serial Enable");
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (andromeda_fp_enable_serial_b), andromeda_fp_serial_enable);
   gtk_widget_show(andromeda_fp_enable_serial_b);
@@ -292,6 +294,7 @@ void rigctl_menu(GtkWidget *parent) {
   gtk_entry_set_text(GTK_ENTRY(andromeda_version_entry),andromeda_fp_version);
   gtk_widget_show(andromeda_version_entry);
   gtk_grid_attach(GTK_GRID(grid),andromeda_version_entry,1,8,2,1);
+#endif
 
 /*
   // Serial parity

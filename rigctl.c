@@ -35,6 +35,7 @@
 #include "actions.h"
 #include "band_menu.h"
 #include "sliders.h"
+#include "new_menu.h"
 #include "rigctl.h"
 #include "radio.h"
 #include "channel.h"
@@ -2631,10 +2632,18 @@ gboolean parse_extended_cmd (char *command,CLIENT *client) {
                 send_resp(client->fd,reply);
                 break;
               case 46: // SDR On
-                if (v==1) {
-                  startstop^=1;
-                  if (protocol == NEW_PROTOCOL) (startstop) ? new_protocol_menu_start() : new_protocol_menu_stop();
-                  else (startstop) ? old_protocol_run() : old_protocol_stop();
+                if (v==0) {
+                  if (longpress) {
+                    longpress=0;
+                  } else {
+                    startstop^=1;
+                    if (protocol == NEW_PROTOCOL) (startstop) ? new_protocol_menu_start() : new_protocol_menu_stop();
+                    else (startstop) ? old_protocol_run() : old_protocol_stop();
+                  }
+                }
+                else if (v==2) {
+                  new_menu();
+                  longpress=1;
                 }
                 break;
             }
@@ -2704,7 +2713,7 @@ gboolean parse_extended_cmd (char *command,CLIENT *client) {
                   send_resp(client->fd,reply);
                 } else {
                   if (p==30 && v==0) // MODE DATA
-                    ext_start_tx(NULL);
+                    start_tx();
                   else if (p==31) // MODE+
                     schedule_action(MODE_PLUS, (v==0)?PRESSED:RELEASED, 0);
                   else if (p==32) // FILTER+

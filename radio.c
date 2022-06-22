@@ -350,7 +350,11 @@ double meter_calibration=0.0;
 double display_calibration=0.0;
 
 int can_transmit=0;
+#ifdef ANDROMEDA
+int optimize_for_touchscreen=1;
+#else
 int optimize_for_touchscreen=0;
+#endif
 
 gboolean duplex=FALSE;
 gboolean mute_rx_while_transmitting=FALSE;
@@ -2290,10 +2294,12 @@ g_print("radioRestoreState: %s\n",property_path);
     if (value) serial_baud_rate=atoi(value);
     value=getProperty("rigctl_serial_port");
     if (value) strcpy(ser_port,value);
+#ifdef ANDROMEDA
     value=getProperty("rigctl_andromeda_fp_serial_enable");
     if (value) andromeda_fp_serial_enable=atoi(value);
     value=getProperty("rigctl_andromeda_fp_serial_port");
     if (value) strcpy(andromeda_fp_serial_port,value);
+#endif
 
     /*
     value=getProperty("adc_0_attenuation");
@@ -2756,9 +2762,11 @@ g_print("radioSaveState: %s\n",property_path);
     sprintf(value,"%d",serial_baud_rate);
     setProperty("rigctl_serial_baud_rate",value);
     setProperty("rigctl_serial_port",ser_port);
+#ifdef ANDROMEDA
     sprintf(value,"%d",andromeda_fp_serial_enable);
     setProperty("rigctl_andromeda_fp_serial_enable",value);
     setProperty("rigctl_andromeda_fp_serial_port",andromeda_fp_serial_port);
+#endif
 
     sprintf(value,"%d",display_sequence_errors);
     setProperty("radio.display_sequence_errors",value);

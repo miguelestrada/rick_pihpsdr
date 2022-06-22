@@ -2702,15 +2702,15 @@ gboolean parse_extended_cmd (char *command,CLIENT *client) {
                   shift=0;
                   sprintf(reply,"ZZZI060;");
                   send_resp(client->fd,reply);
-                } else {//if (v==0) {
-                  if (p==33 && v==0) // RX2
-                    radio_change_receivers(receivers==1?2:1);
-                  else if (p==30) // MODE DATA
-                    schedule_action(MENU_MODE, (v==0)?PRESSED:RELEASED, 0);
+                } else {
+                  if (p==30 && v==0) // MODE DATA
+                    ext_start_tx(NULL);
                   else if (p==31) // MODE+
                     schedule_action(MODE_PLUS, (v==0)?PRESSED:RELEASED, 0);
                   else if (p==32) // FILTER+
                     schedule_action(FILTER_PLUS, (v==0)?PRESSED:RELEASED, 0);
+                  else if (p==33 && v==0) // RX2
+                    radio_change_receivers(receivers==1?2:1);
                   else if (p==34) // MODE-
                     schedule_action(MODE_MINUS, (v==0)?PRESSED:RELEASED, 0);
                   else if (p==35) // FILTER-

@@ -350,11 +350,7 @@ double meter_calibration=0.0;
 double display_calibration=0.0;
 
 int can_transmit=0;
-#ifdef ANDROMEDA
-int optimize_for_touchscreen=1;
-#else
 int optimize_for_touchscreen=0;
-#endif
 
 gboolean duplex=FALSE;
 gboolean mute_rx_while_transmitting=FALSE;
@@ -695,7 +691,11 @@ void start_radio() {
   // but this can be overridden in the RADIO menu or when reading
   // from the props file
   //
+#ifdef ANDROMEDA
+  optimize_for_touchscreen=1;
+#else
   optimize_for_touchscreen=0;
+#endif
 
   protocol=radio->protocol;
   device=radio->device;

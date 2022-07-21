@@ -161,6 +161,14 @@ int atlas_config=0;
 int atlas_mic_source=0;
 int atlas_janus=0;
 
+//
+// if hl2_audio_codec is set,  audio data is included in the HPSDR
+// data stream and the "dither" bit is set. This is used by a
+// "compagnion board" and  a variant of the HL2 firmware
+// This bit can be set in the "RADIO" menu.
+//
+int hl2_audio_codec=0;
+
 int classE=0;
 
 int tx_out_of_band=0;
@@ -2112,6 +2120,8 @@ g_print("radioRestoreState: %s\n",property_path);
     if(value) atlas_mic_source=atoi(value);
     value=getProperty("atlas_janus");
     if(value) atlas_janus=atoi(value);
+    value=getProperty("hl2_audio_codec");
+    if(value) hl2_audio_codec=atoi(value);
     value=getProperty("tx_out_of_band");
     if(value) tx_out_of_band=atoi(value);
     value=getProperty("filter_board");
@@ -2489,6 +2499,8 @@ g_print("radioSaveState: %s\n",property_path);
     setProperty("atlas_mic_source",value);
     sprintf(value,"%d",atlas_janus);
     setProperty("atlas_janus",value);
+    sprintf(value,"%d",hl2_audio_codec);
+    setProperty("hl2_audio_codec",value);
     sprintf(value,"%d",filter_board);
     setProperty("filter_board",value);
     sprintf(value,"%d",tx_out_of_band);

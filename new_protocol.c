@@ -945,8 +945,9 @@ static void new_protocol_high_priority() {
 //
 //    Do not switch TR relay to "TX" if PA is disabled.
 //    This is necessary because the "PA enable flag" in the GeneralPacket
-//    has no effect for my Anan-7000 (this is the "safety belt").
-//    (this is also the way it is done in the old protocol)
+//    had no effect in the Orion-II firmware up to 2.1.18
+//    (starting with 2.1.15, it works: thanks to Rick N1GP)
+//    But we have to keep this "safety belt" for some time.
 //
       if (!band->disablePA  && pa_enabled) {
         alex0 |= ALEX_TX_RELAY;
@@ -1281,7 +1282,7 @@ static void new_protocol_transmit_specific() {
     transmit_specific_buffer[10]=cw_keyer_weight; // cw weight
     transmit_specific_buffer[11]=cw_keyer_hang_time>>8;
     transmit_specific_buffer[12]=cw_keyer_hang_time; // cw hang delay
-    transmit_specific_buffer[13]=0; // rf delay
+    transmit_specific_buffer[13]=cw_keyer_ptt_delay;
 
     transmit_specific_buffer[50]=0;
     if(mic_linein) {

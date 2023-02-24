@@ -379,9 +379,11 @@ g_print("radio_stop: TX: CloseChannel: %d\n",transmitter->id);
   set_displaying(receiver[0],0);
 g_print("radio_stop: RX0: CloseChannel: %d\n",receiver[0]->id);
   CloseChannel(receiver[0]->id);
+  if (RECEIVERS == 2) {
   set_displaying(receiver[1],0);
 g_print("radio_stop: RX1: CloseChannel: %d\n",receiver[1]->id);
   CloseChannel(receiver[1]->id);
+}
 }
 
 void reconfigure_radio() {
@@ -1376,7 +1378,7 @@ void start_radio() {
     soapy_protocol_set_gain(rx);
 
     if(vfo[0].ctun) {
-      setFrequency(vfo[0].ctun_frequency);
+      receiver_set_frequency(rx,vfo[0].ctun_frequency);
     }
     soapy_protocol_start_receiver(rx);
 
@@ -1428,7 +1430,7 @@ void radio_change_receivers(int r) {
 g_print("radio_change_receivers: from %d to %d\n",receivers,r);
   // The button in the radio menu will call this function even if the
   // number of receivers has not changed.
-  if (receivers == r) return;
+  if (receivers == r) return;  // This is always the case if RECEIVERS==1
   //
   // When changing the number of receivers, restart the
   // old protocol
@@ -1817,6 +1819,8 @@ void setTune(int state) {
           tx_set_mode(transmitter,modeUSB);
           break;
       }
+      tune=state;
+      calcDriveLevel();
       rxtx(state);
     } else {
       rxtx(state);
@@ -1836,8 +1840,9 @@ void setTune(int state) {
 	//
 	SetPSControl(transmitter->id, 0, 0, 1, 0);
       }
-    }
     tune=state;
+      calcDriveLevel();
+    }
   }
   if(protocol==NEW_PROTOCOL) {
     schedule_high_priority();
@@ -1853,51 +1858,6 @@ int isTransmitting() {
   return mox | vox | tune;
 }
 
-void setFrequency(long long f) {
-  int v=active_receiver->id;
-  vfo[v].band=get_band_from_frequency(f);
-
-  if(vfo[v].ctun) {
-    //
-    // If new frequency is within "window", change the CTUN frequency and
-    // update the offset. If it is outside, deactivate CTUN and fall
-    // through
-    //
-    long long minf=vfo[v].frequency-(long long)(active_receiver->sample_rate/2);
-    long long maxf=vfo[v].frequency+(long long)(active_receiver->sample_rate/2);
-    if(f > minf && f < maxf) {
-      vfo[v].ctun_frequency=f;
-      vfo[v].offset=f-vfo[v].frequency;
-      set_offset(active_receiver,vfo[v].offset);
-      return;
-    }
-    vfo[v].ctun=0;
-    vfo[v].ctun_frequency=0;
-    vfo[v].offset=0;
-    set_offset(active_receiver,vfo[v].offset);
-  }
-  vfo[v].frequency=f;
-
-  switch(protocol) {
-    case NEW_PROTOCOL:
-      schedule_high_priority();
-      break;
-    case ORIGINAL_PROTOCOL:
-      break;
-#ifdef SOAPYSDR
-    case SOAPYSDR_PROTOCOL:
-      if(!vfo[v].ctun) {
-        soapy_protocol_set_rx_frequency(active_receiver,v);
-        vfo[v].offset=0;
-      }
-      break;
-#endif
-  }
-}
-
-long long getFrequency() {
-    return vfo[active_receiver->id].frequency;
-}
 
 double getDrive() {
     return transmitter->drive;
@@ -1927,11 +1887,16 @@ static int calcLevel(double d) {
 }
 
 void calcDriveLevel() {
+  if (tune && !transmitter->tune_use_drive) {
+    transmitter->drive_level=calcLevel(transmitter->tune_drive);
+g_print("calcDriveLevel: tune=%d drive_level=%d\n",transmitter->tune_drive,transmitter->drive_level);
+  } else {
   transmitter->drive_level=calcLevel(transmitter->drive);
+g_print("calcDriveLevel: drive=%d drive_level=%d\n",transmitter->drive,transmitter->drive_level);
+  }
   if(isTransmitting()  && protocol==NEW_PROTOCOL) {
     schedule_high_priority();
   }
-//g_print("calcDriveLevel: drive=%d drive_level=%d\n",transmitter->drive,transmitter->drive_level);
 }
 
 void setDrive(double value) {
@@ -1950,7 +1915,7 @@ void setDrive(double value) {
 }
 
 double getTuneDrive() {
-    return transmitter->tune_percent;
+    return transmitter->tune_drive;
 }
 
 void setSquelch(RECEIVER *rx) {
@@ -2047,6 +2012,10 @@ void set_alex_attenuation(int v) {
     if(protocol==NEW_PROTOCOL) {
       schedule_high_priority();
     }
+}
+
+void radio_split_toggle() {
+  radio_set_split(!split);
 }
 
 void radio_set_split(int val) {
@@ -2442,7 +2411,7 @@ g_print("radioSaveState: %s\n",property_path);
   gpio_save_actions();
   sprintf(value,"%d",receivers);
   setProperty("receivers",value);
-  for(i=0;i<receivers;i++) {
+  for(i=0;i<RECEIVERS;i++) {
     receiver_save_state(receiver[i]);
   }
 

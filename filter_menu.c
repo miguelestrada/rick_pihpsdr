@@ -237,6 +237,7 @@ void filter_menu(GtkWidget *parent) {
       g_signal_connect(b,"pressed",G_CALLBACK(filter_select_cb),(gpointer)(long)i);
 
       var1_spin_low=gtk_spin_button_new_with_range(-8000.0,+8000.0,1.0);
+
       //
       // in CW, filter_low is HALF of the filter width
       //

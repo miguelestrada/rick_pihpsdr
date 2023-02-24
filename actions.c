@@ -314,8 +314,10 @@ int process_action(void *data) {
       set_af_gain(0,value);
       break;
     case AF_GAIN_RX2:
+      if (receivers == 2) {
       value=KnobOrWheel(a, receiver[1]->volume, 0.0, 1.0, 0.01);
       set_af_gain(1,value);
+      }
       break;
     case AGC:
       if(a->mode==PRESSED) {
@@ -336,8 +338,10 @@ int process_action(void *data) {
       set_agc_gain(0,value);
       break;
     case AGC_GAIN_RX2:
+      if (receivers == 2) {
       value=KnobOrWheel(a, receiver[1]->agc_gain, -20.0, 120.0, 1.0);
       set_agc_gain(1,value);
+      }
       break;
     case ANF:
       if(a->mode==PRESSED) {
@@ -480,50 +484,12 @@ int process_action(void *data) {
       break;
     case BAND_MINUS:
       if(a->mode==PRESSED) {
-        long long frequency_min=radio->frequency_min;
-        long long frequency_max=radio->frequency_max;
-        int b=vfo[active_receiver->id].band;
-        BAND *band;
-        int found=0;
-        while(!found) {
-          b--;
-          if(b<0) b=BANDS+XVTRS-1;
-          band=(BAND*)band_get_band(b);
-          if(strlen(band->title)>0) {
-            if(b<BANDS) {
-              if(band->frequencyMin<frequency_min || band->frequencyMax>frequency_max) {
-                continue;
-              }
-            }
-            vfo_band_changed(active_receiver->id,b);
-            found=1;
-          }
-        }
+        band_minus(active_receiver->id);
       }
       break;
     case BAND_PLUS:
       if(a->mode==PRESSED) {
-        long long frequency_min=radio->frequency_min;
-        long long frequency_max=radio->frequency_max;
-        int b=vfo[active_receiver->id].band;
-        BAND *band;
-        int found=0;
-        while(!found) {
-          b++;
-          if(b>=BANDS+XVTRS) b=0;
-          band=(BAND*)band_get_band(b);
-          if(strlen(band->title)>0) {
-            if(b<BANDS) {
-              if(!(band->frequencyMin==0.0 && band->frequencyMax==0.0)) {
-                if(band->frequencyMin<frequency_min || band->frequencyMax>frequency_max) {
-                  continue;
-                }
-              }
-            }
-            vfo_band_changed(active_receiver->id,b);
-            found=1;
-          }
-        }
+        band_plus(active_receiver->id);
       }
       break;
     case BAND_WWV:
@@ -567,17 +533,8 @@ int process_action(void *data) {
       break;
     case CTUN:
       if(a->mode==PRESSED) {
-        vfo[active_receiver->id].ctun=!vfo[active_receiver->id].ctun;
-        if(!vfo[active_receiver->id].ctun) {
-          // when deactivating CTUN,  keep frequency
-          setFrequency(vfo[active_receiver->id].ctun_frequency);
-        } else {
-          // when activating CTUN, continue with current frequency
-          vfo[active_receiver->id].ctun_frequency=vfo[active_receiver->id].frequency;
-        }
-        // in either case, start with zero offset after toggling CTUN
-        vfo[active_receiver->id].offset=0;
-        set_offset(receiver[active_receiver->id],vfo[active_receiver->id].offset);
+        int state=vfo[active_receiver->id].ctun ? 0 : 1;
+        vfo_ctun_update(active_receiver->id,state);
         g_idle_add(ext_vfo_update, NULL);
       }
       break;
@@ -855,62 +812,62 @@ int process_action(void *data) {
       break;
     case NUMPAD_0:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(0));
+        num_pad(0);
       }
       break;
     case NUMPAD_1:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(1));
+        num_pad(1);
       }
       break;
     case NUMPAD_2:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(2));
+        num_pad(2);
       }
       break;
     case NUMPAD_3:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(3));
+        num_pad(3);
       }
       break;
     case NUMPAD_4:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(4));
+        num_pad(4);
       }
       break;
     case NUMPAD_5:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(5));
+        num_pad(5);
       }
       break;
     case NUMPAD_6:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(6));
+        num_pad(6);
       }
       break;
     case NUMPAD_7:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(7));
+        num_pad(7);
       }
       break;
     case NUMPAD_8:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(8));
+        num_pad(8);
       }
       break;
     case NUMPAD_9:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(9));
+        num_pad(9);
       }
       break;
     case NUMPAD_CL:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(-1));
+        num_pad(-1);
       }
       break;
     case NUMPAD_ENTER:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_num_pad,GINT_TO_POINTER(-2));
+        num_pad(-2);
       }
       break;
     case PAN:
@@ -967,8 +924,10 @@ int process_action(void *data) {
       set_rf_gain(0,value);
       break;
     case RF_GAIN_RX2:
+      if (receivers == 2) {
       value=KnobOrWheel(a, adc[receiver[1]->adc].gain, adc[receiver[1]->adc].min_gain, adc[receiver[1]->adc].max_gain, 1.0);
       set_rf_gain(1,value);
+      }
       break;
     case RIT:
       vfo_rit(active_receiver->id,a->val);
@@ -1008,10 +967,10 @@ int process_action(void *data) {
       }
       break;
     case RIT_RX1:
-      vfo_rit(receiver[0]->id,a->val);
+      vfo_rit(0, a->val);
       break;
     case RIT_RX2:
-      vfo_rit(receiver[1]->id,a->val);
+      vfo_rit(1, a->val);
       break;
     case RIT_STEP:
       switch(a->mode) {
@@ -1067,7 +1026,7 @@ int process_action(void *data) {
       break;
     case SPLIT:
       if(a->mode==PRESSED) {
-        g_idle_add(ext_split_toggle, NULL);
+        radio_split_toggle();
       }
       break;
     case SQUELCH:
@@ -1081,9 +1040,11 @@ int process_action(void *data) {
       set_squelch(receiver[0]);
       break;
     case SQUELCH_RX2:
+      if (receivers == 2) {
       value=KnobOrWheel(a, receiver[1]->squelch, 0.0, 100.0, 1.0);
       receiver[1]->squelch=value;
       set_squelch(receiver[1]);
+      }
       break;
     case SWAP_RX:
       if(a->mode==PRESSED) {
@@ -1103,8 +1064,8 @@ int process_action(void *data) {
       break;
     case TUNE_DRIVE:
       if(can_transmit) {
-        value=KnobOrWheel(a, (double) transmitter->tune_percent, 0.0, 100.0, 1.0);
-        transmitter->tune_percent=(int) value;
+        value=KnobOrWheel(a, (double) transmitter->tune_drive, 0.0, 100.0, 1.0);
+        transmitter->tune_drive=(int) value;
       }
       break;
     case TUNE_FULL:

@@ -451,18 +451,12 @@ void vfo_band_changed(int id,int b) {
   // during receiver_vfo_changed ==> receiver_frequency_changed
   //
 
-  switch(id) {
-    case 0:
+  if (id == 0) {
       bandstack->current_entry=vfo[id].bandstack;
-      vfo_apply_mode_settings(receiver[0]);
-      receiver_vfo_changed(receiver[0]);
-      break;
-   case 1:
-      if(receivers==2) {
-        vfo_apply_mode_settings(receiver[1]);
-        receiver_vfo_changed(receiver[1]);
       }
-      break;
+  if (id < receivers) { 
+    vfo_apply_mode_settings(receiver[id]);
+    receiver_vfo_changed(receiver[id]);
   }
   tx_vfo_changed(); 
   set_alex_antennas();  // This includes scheduling hiprio and general packets
@@ -494,18 +488,12 @@ void vfo_bandstack_changed(int b) {
   vfo[id].mode=entry->mode;
   vfo[id].filter=entry->filter;
 
-  switch(id) {
-    case 0:
+  if (id == 0) {
       bandstack->current_entry=vfo[id].bandstack;
-      vfo_apply_mode_settings(receiver[0]);
-      receiver_vfo_changed(receiver[0]);
-      break;
-   case 1:
-      if(receivers==2) {
-        vfo_apply_mode_settings(receiver[1]);
-        receiver_vfo_changed(receiver[1]);
       }
-      break;
+  if (id < receivers) {
+    vfo_apply_mode_settings(receiver[id]);
+    receiver_vfo_changed(receiver[id]);
   }
   tx_vfo_changed(); 
   set_alex_antennas();  // This includes scheduling hiprio and general packets
@@ -523,20 +511,11 @@ void vfo_mode_changed(int m) {
 
   vfo[id].mode=m;
 
-  switch(id) {
-    case 0:
-      vfo_apply_mode_settings(receiver[0]);
-      receiver_mode_changed(receiver[0]);
-      receiver_filter_changed(receiver[0]);
-      break;
-    case 1:
-      if(receivers==2) {
-        vfo_apply_mode_settings(receiver[1]);
-        receiver_mode_changed(receiver[1]);
-        receiver_filter_changed(receiver[1]);
+  if (id < receivers) {
+    vfo_apply_mode_settings(receiver[id]);
+    receiver_mode_changed(receiver[id]);
+    receiver_filter_changed(receiver[id]);
       }
-      break;
-  }
   if(can_transmit) {
     tx_set_mode(transmitter,get_tx_mode());
   }
@@ -564,15 +543,8 @@ void vfo_filter_changed(int f) {
   mode_settings[vfo[id].mode].filter = f;
 
   vfo[id].filter=f;
-  switch(id) {
-    case 0:
-      receiver_filter_changed(receiver[0]);
-      break;
-    case 1:
-      if(receivers==2) {
-        receiver_filter_changed(receiver[1]);
-      }
-      break;
+  if (id < receivers) {
+    receiver_filter_changed(receiver[id]);
   }
 
   g_idle_add(ext_vfo_update,NULL);
@@ -769,7 +741,10 @@ void vfo_step(int steps) {
     }
 
     sid=id==0?1:0;
+    if (sid < receivers) {
     other_receiver=receiver[sid];
+    }
+    // other_receiver will be accessed only if receivers == 2
 
     switch(sat_mode) {
       case SAT_NONE:
@@ -823,7 +798,9 @@ void vfo_id_step(int id, int steps) {
     }
 
     sid=id==0?1:0;
+    if (sid < receivers) {
     other_receiver=receiver[sid];
+    }
 
     switch(sat_mode) {
       case SAT_NONE:
@@ -902,7 +879,9 @@ void vfo_id_move(int id,long long hz,int round) {
     }
 
     sid=id==0?1:0;
+    if (sid < receivers) {
     other_receiver=receiver[sid];
+    }
 
     switch(sat_mode) {
       case SAT_NONE:
@@ -983,7 +962,9 @@ void vfo_move_to(long long hz) {
     }
 
     sid=id==0?1:0;
+    if (sid < receivers) {
     other_receiver=receiver[sid];
+    }
 
     switch(sat_mode) {
       case SAT_NONE:
@@ -1492,30 +1473,36 @@ long long get_tx_freq() {
     return vfo[txvfo].frequency;
   }
 }
-void vfo_rit_update(int rx) {
-  vfo[receiver[rx]->id].rit_enabled=vfo[receiver[rx]->id].rit_enabled==1?0:1;
-  receiver_frequency_changed(receiver[rx]);
+void vfo_rit_update(int id) {
+  vfo[id].rit_enabled=vfo[id].rit_enabled==1?0:1;
+  if (id < receivers) {
+    receiver_frequency_changed(receiver[id]);
+  }
   g_idle_add(ext_vfo_update, NULL);
 }
 
-void vfo_rit_clear(int rx) {
-  vfo[receiver[rx]->id].rit=0;
-  vfo[receiver[rx]->id].rit_enabled=0;
-  receiver_frequency_changed(receiver[rx]);
+void vfo_rit_clear(int id) {
+  vfo[id].rit=0;
+  vfo[id].rit_enabled=0;
+  if (id < receivers) {
+    receiver_frequency_changed(receiver[id]);
+  }
   g_idle_add(ext_vfo_update, NULL);
 }
 
-void vfo_rit(int rx,int i) {
-  double value=(double)vfo[receiver[rx]->id].rit;
+void vfo_rit(int id,int i) {
+  double value=(double)vfo[id].rit;
   value+=(double)(i*rit_increment);
   if(value<-10000.0) {
     value=-10000.0;
   } else if(value>10000.0) {
     value=10000.0;
   }
-  vfo[receiver[rx]->id].rit=value;
-  vfo[receiver[rx]->id].rit_enabled=(value!=0);
-  receiver_frequency_changed(receiver[rx]);
+  vfo[id].rit=value;
+  vfo[id].rit_enabled=(value!=0);
+  if (id < receivers) {
+    receiver_frequency_changed(receiver[id]);
+  }
   g_idle_add(ext_vfo_update,NULL);
 }
 
@@ -1533,22 +1520,86 @@ void vfo_set_frequency(int v,long long f) {
   if (b != vfo[v].band) {
     vfo_band_changed(v, b);
   }
-  if(active_receiver->id==v) {
-    setFrequency(f);
+  if (v == VFO_A) receiver_set_frequency(receiver[0], f);
+  if (v == VFO_B) {
+    //
+    // If there is only one receiver, there is no RX running that
+    // is controlled by VFO_B, so just update the frequency of the
+    // VFO without telling WDSP about it.
+    // If VFO_B controls a (running) receiver, do the "full job".
+    //
+    if (receivers == 2) {
+      receiver_set_frequency(receiver[1], f);
   } else {
-    // change VFO frequency of the non-active receiver
     vfo[v].frequency=f;
     if (vfo[v].ctun) {
       vfo[v].ctun=FALSE;
       vfo[v].offset=0;
       vfo[v].ctun_frequency=vfo[v].frequency;
     }
-    if (receivers == 2) {
-      // VFO v controls a running  WDSP receiver,
-      // need to "manually change" it.
-      // DO NOT DO IT HERE. Better add a "RECEIVER *rx" argument
-      // to setFrequency in radio.c
     }
   }
   g_idle_add(ext_vfo_update, NULL);
 }
+//
+// Set CTUN state of a VFO
+//
+void vfo_ctun_update(int id,int state) {
+  long long f;
+  //
+  // Note: if this VFO does not control a (running) receiver,
+  //       receiver_set_frequency is *not* called therefore
+  //       we should update ctun_frequency and offset
+  //
+  if (vfo[id].ctun == state) return;  // no-op if no change
+  vfo[id].ctun=state;
+  if(vfo[id].ctun) {
+    // CTUN turned OFF->ON
+    vfo[id].ctun_frequency=vfo[id].frequency;
+    vfo[id].offset=0;
+    if (id < receivers) {
+      receiver_set_frequency(receiver[id],vfo[id].ctun_frequency);
+    }
+  } else {
+    // CTUN turned ON->OFF: keep frequency
+    vfo[id].frequency=vfo[id].ctun_frequency;
+    vfo[id].offset=0;
+    if (id < receivers) {
+      receiver_set_frequency(receiver[id],vfo[id].ctun_frequency);
+    }
+  }
+}
+
+//
+// helper function for numerically entering a new VFO frequency
+//
+void num_pad(int val) {
+  //
+  // The numpad may be difficult to use since the frequency has to be given in Hz
+  // TODO: add a multiplier button like "kHz"
+  // TODO: display the current "entered_frequency" somewhere 
+  //       (not all of us are good in typing blind)
+  //
+  RECEIVER *rx=active_receiver;
+  if(!vfo[rx->id].entering_frequency) {
+    vfo[rx->id].entered_frequency=0;
+    vfo[rx->id].entering_frequency=TRUE;
+  }
+  switch(val) {
+    case -1: // clear
+      vfo[rx->id].entered_frequency=0;
+      vfo[rx->id].entering_frequency=FALSE;
+      break;
+    case -2: // enter
+      if(vfo[rx->id].entered_frequency!=0) {
+        receiver_set_frequency(rx, vfo[rx->id].entered_frequency);
+        g_idle_add(ext_vfo_update, NULL);
+      }
+      vfo[rx->id].entering_frequency=FALSE;
+      break;
+    default:
+      vfo[rx->id].entered_frequency=(vfo[rx->id].entered_frequency*10)+val;
+      break;
+  }
+}
+

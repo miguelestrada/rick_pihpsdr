@@ -289,10 +289,11 @@ static void agcgain_value_changed_cb(GtkWidget *widget, gpointer data) {
 
 void set_agc_gain(int rx,double value) {
   g_print("%s\n",__FUNCTION__);
+  if (rx >= receivers) return;
   receiver[rx]->agc_gain=value;
   set_agc(receiver[rx], receiver[rx]->agc);
   if(display_sliders) {
-    if (rx==active_receiver->id) gtk_range_set_value (GTK_RANGE(agc_scale),receiver[rx]->agc_gain);
+    gtk_range_set_value (GTK_RANGE(agc_scale),receiver[rx]->agc_gain);
   } else {
     if(scale_status!=AGC_GAIN || scale_rx!=rx) {
       if(scale_status!=NO_ACTION) {
@@ -348,10 +349,11 @@ void update_af_gain() {
 }
 
 void set_af_gain(int rx,double value) {
+  if (rx >= receivers) return;
   receiver[rx]->volume=value;
   SetRXAPanelGain1 (receiver[rx]->id, receiver[rx]->volume);
   if(display_sliders) {
-    if(active_receiver->id==rx) gtk_range_set_value (GTK_RANGE(af_gain_scale),receiver[rx]->volume*100.0);
+    gtk_range_set_value (GTK_RANGE(af_gain_scale),receiver[rx]->volume*100.0);
   } else {
     if(scale_status!=AF_GAIN || scale_rx!=rx) {
       if(scale_status!=NO_ACTION) {
@@ -408,6 +410,7 @@ void update_rf_gain() {
 }
 
 void set_rf_gain(int rx,double value) {
+  if (rx >= receivers) return;
   int rxadc=receiver[rx]->adc;
   g_print("%s rx=%d adc=%d val=%f\n",__FUNCTION__, rx, rxadc, value);
   if (!have_rx_gain) {

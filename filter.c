@@ -22,11 +22,11 @@
 
 #include "sliders.h"
 #include "filter.h"
-#include "actions.h"
 #include "receiver.h"
 #include "vfo.h"
 #include "radio.h"
 #include "property.h"
+#include "actions.h"
 
 FILTER filterLSB[FILTERS]={
     {-5150,-150,"5.0k"},
@@ -445,12 +445,11 @@ void filterRestoreState() {
 
 }
 
-void filter_cut_changed(int rx, int action, int increment) {
-  int id=receiver[rx]->id;
+void filter_cut_changed(int id, int action, int increment) {
   FILTER *mode_filters=filters[vfo[id].mode];
   FILTER *filter=&mode_filters[vfo[id].filter];
 
-//fprintf(stderr,"filter_cut_changed: rx=%d action=%d, mode=%d filter=%d increment=%d\n",rx,action,vfo[id].mode,vfo[id].filter,increment);
+//fprintf(stderr,"filter_cut_changed: rx=%d action=%d, mode=%d filter=%d increment=%d\n",id,action,vfo[id].mode,vfo[id].filter,increment);
 
   if(vfo[id].filter==filterVar1 || vfo[id].filter==filterVar2) {
 
@@ -470,12 +469,11 @@ void filter_cut_changed(int rx, int action, int increment) {
   }
 }
 
-void filter_width_changed(int rx,int increment) {
-  int id=receiver[rx]->id;
+void filter_width_changed(int id,int increment) {
   FILTER *mode_filters=filters[vfo[id].mode];
   FILTER *filter=&mode_filters[vfo[id].filter];
 
-fprintf(stderr,"filter_width_changed: rx=%d mode=%d filter=%d increment=%d\n",rx,vfo[id].mode,vfo[id].filter,increment);
+fprintf(stderr,"filter_width_changed: rx=%d mode=%d filter=%d increment=%d\n",id,vfo[id].mode,vfo[id].filter,increment);
 
   if(vfo[id].filter==filterVar1 || vfo[id].filter==filterVar2) {
 
@@ -500,12 +498,11 @@ fprintf(stderr,"filter_width_changed: rx=%d mode=%d filter=%d increment=%d\n",rx
   }
 }
 
-void filter_shift_changed(int rx,int increment) {
-  int id=receiver[rx]->id;
+void filter_shift_changed(int id,int increment) {
   FILTER *mode_filters=filters[vfo[id].mode];
   FILTER *filter=&mode_filters[vfo[id].filter];
 
-fprintf(stderr,"filter_shift_changed: rx=%d mode=%d filter=%d increment=%d\n",rx,vfo[id].mode,vfo[id].filter,increment);
+fprintf(stderr,"filter_shift_changed: rx=%d mode=%d filter=%d increment=%d\n",id,vfo[id].mode,vfo[id].filter,increment);
 
   if(vfo[id].filter==filterVar1 || vfo[id].filter==filterVar2) {
     switch(vfo[id].mode) {

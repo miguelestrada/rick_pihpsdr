@@ -20,14 +20,6 @@
 // Define maximum window size. 
 // Standard values 800 and 480: suitable for RaspberryBi 7-inch screen
 
-#ifdef ANDROMEDA
-#define MAX_DISPLAY_WIDTH  1200
-#define MAX_DISPLAY_HEIGHT 600
-#else
-#define MAX_DISPLAY_WIDTH  800
-#define MAX_DISPLAY_HEIGHT 480
-#endif
-
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
 #include <math.h>
@@ -40,6 +32,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "appearance.h"
 #include "audio.h"
 #include "band.h"
 #include "bandstack.h"
@@ -201,7 +194,7 @@ static int init(void *data) {
   // Depending on the WDSP version, the file is wdspWisdom or wdspWisdom00.
   // sem_trywait() is not elegant, replaced this with wisdom_running variable.
   //
-  char *c=getcwd(wisdom_directory, sizeof(wisdom_directory));
+  (void) getcwd(wisdom_directory, sizeof(wisdom_directory));
   strcpy(&wisdom_directory[strlen(wisdom_directory)],"/");
   fprintf(stderr,"Securing wisdom file in directory: %s\n", wisdom_directory);
   status_text("Checking FFTW Wisdom file ...");
@@ -276,6 +269,7 @@ fprintf(stderr,"display_width=%d display_height=%d\n", display_width, display_he
 
   fprintf(stderr,"create top level window\n");
   top_window = gtk_application_window_new (app);
+  set_backgnd(top_window);
   if(full_screen) {
     fprintf(stderr,"full screen\n");
     gtk_window_fullscreen(GTK_WINDOW(top_window));

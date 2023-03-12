@@ -763,12 +763,7 @@ void midi_menu(GtkWidget *parent) {
   gtk_window_set_title(GTK_WINDOW(dialog),title);
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
 
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -931,7 +926,7 @@ void midi_menu(GtkWidget *parent) {
 
   scrolled_window=gtk_scrolled_window_new (NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),GTK_POLICY_AUTOMATIC,GTK_POLICY_ALWAYS);
-  gtk_widget_set_size_request(scrolled_window,400,200);
+  gtk_widget_set_size_request(scrolled_window,400,300-15*((n_midi_devices+1)/3));
 
   view=gtk_tree_view_new();
 
@@ -939,7 +934,7 @@ void midi_menu(GtkWidget *parent) {
   gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view), -1, "Event", renderer, "text", EVENT_COLUMN, NULL);
 
   renderer=gtk_cell_renderer_text_new();
-  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view), -1, "CHANNEL", renderer, "text", CHANNEL_COLUMN, NULL);
+  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view), -1, "Channel", renderer, "text", CHANNEL_COLUMN, NULL);
 
   renderer=gtk_cell_renderer_text_new();
   gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view), -1, "NOTE", renderer, "text", NOTE_COLUMN, NULL);
@@ -1014,7 +1009,6 @@ void midi_menu(GtkWidget *parent) {
   set_delay = gtk_spin_button_new_with_range(0.0, 500.0, 10.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_delay, col, row, 1, 1);
   g_signal_connect(set_delay, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(1));
-  col++;
 
   row++;
   col=0;
@@ -1031,7 +1025,6 @@ void midi_menu(GtkWidget *parent) {
   set_vfl2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_vfl2, col, row, 1, 1);
   g_signal_connect(set_vfl2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(3));
-  col++;
 
   row++;
   col=0;
@@ -1049,7 +1042,6 @@ void midi_menu(GtkWidget *parent) {
   set_fl2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_fl2, col, row, 1, 1);
   g_signal_connect(set_fl2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(5));
-  col++;
 
   row++;
   col=0;
@@ -1066,7 +1058,6 @@ void midi_menu(GtkWidget *parent) {
   set_lft2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_lft2, col, row, 1, 1);
   g_signal_connect(set_lft2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(7));
-  col++;
 
   row++;
   col=0;
@@ -1083,7 +1074,6 @@ void midi_menu(GtkWidget *parent) {
   set_rgt2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_rgt2, col, row, 1, 1);
   g_signal_connect(set_rgt2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(9));
-  col++;
 
   row++;
   col=0;
@@ -1100,7 +1090,6 @@ void midi_menu(GtkWidget *parent) {
   set_fr2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_fr2, col, row, 1, 1);
   g_signal_connect(set_fr2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(11));
-  col++;
 
   row++;
   col=0;
@@ -1117,7 +1106,6 @@ void midi_menu(GtkWidget *parent) {
   set_vfr2 = gtk_spin_button_new_with_range(-1.0, 127.0, 1.0);
   gtk_grid_attach(GTK_GRID(WheelGrid), set_vfr2, col, row, 1, 1);
   g_signal_connect(set_vfr2, "value-changed", G_CALLBACK(wheelparam_cb), GINT_TO_POINTER(13));
-  col++;
 
   gtk_container_add(GTK_CONTAINER(content),grid);
   gtk_container_add(GTK_CONTAINER(WheelContainer), WheelGrid);
@@ -1134,7 +1122,6 @@ void midi_menu(GtkWidget *parent) {
 static int update(void *data) {
   int state=GPOINTER_TO_INT(data);
   gchar text[32];
-  gint i=1;
 
   switch(state) {
     case UPDATE_NEW:
@@ -1622,14 +1609,14 @@ void midi_restore_state() {
 	  }
           sprintf(name,"midi[%d].entry[%d].channel[%d].action",i,entry,channel);
           value=getProperty(name);
+	  action=NO_ACTION;
+          if(value) {
           // convert '$' back to '\n' in action name before comparing
           cp=value;
           while (*cp) {
             if (*cp == '$') *cp='\n';
             cp++;
           }
-	  action=NO_ACTION;
-          if(value) {
 	    for(j=0;j<ACTIONS;j++) {
               if(strcmp(value,ActionTable[j].str)==0) {
                 action=ActionTable[j].action;

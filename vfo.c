@@ -31,6 +31,7 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 
+#include "appearance.h"
 #include "discovered.h"
 #include "main.h"
 #include "agc.h"
@@ -453,11 +454,12 @@ void vfo_band_changed(int id,int b) {
 
   if (id == 0) {
       bandstack->current_entry=vfo[id].bandstack;
-      }
+  }
   if (id < receivers) { 
     vfo_apply_mode_settings(receiver[id]);
     receiver_vfo_changed(receiver[id]);
   }
+
   tx_vfo_changed(); 
   set_alex_antennas();  // This includes scheduling hiprio and general packets
 #ifdef SOAPYSDR
@@ -489,12 +491,13 @@ void vfo_bandstack_changed(int b) {
   vfo[id].filter=entry->filter;
 
   if (id == 0) {
-      bandstack->current_entry=vfo[id].bandstack;
-      }
+    bandstack->current_entry=vfo[id].bandstack;
+  }
   if (id < receivers) {
     vfo_apply_mode_settings(receiver[id]);
     receiver_vfo_changed(receiver[id]);
   }
+   
   tx_vfo_changed(); 
   set_alex_antennas();  // This includes scheduling hiprio and general packets
   g_idle_add(ext_vfo_update,NULL);
@@ -515,7 +518,8 @@ void vfo_mode_changed(int m) {
     vfo_apply_mode_settings(receiver[id]);
     receiver_mode_changed(receiver[id]);
     receiver_filter_changed(receiver[id]);
-      }
+  }
+
   if(can_transmit) {
     tx_set_mode(transmitter,get_tx_mode());
   }
@@ -742,7 +746,7 @@ void vfo_step(int steps) {
 
     sid=id==0?1:0;
     if (sid < receivers) {
-    other_receiver=receiver[sid];
+      other_receiver=receiver[sid];
     }
     // other_receiver will be accessed only if receivers == 2
 
@@ -799,7 +803,7 @@ void vfo_id_step(int id, int steps) {
 
     sid=id==0?1:0;
     if (sid < receivers) {
-    other_receiver=receiver[sid];
+      other_receiver=receiver[sid];
     }
 
     switch(sat_mode) {
@@ -880,7 +884,7 @@ void vfo_id_move(int id,long long hz,int round) {
 
     sid=id==0?1:0;
     if (sid < receivers) {
-    other_receiver=receiver[sid];
+      other_receiver=receiver[sid];
     }
 
     switch(sat_mode) {
@@ -963,7 +967,7 @@ void vfo_move_to(long long hz) {
 
     sid=id==0?1:0;
     if (sid < receivers) {
-    other_receiver=receiver[sid];
+      other_receiver=receiver[sid];
     }
 
     switch(sat_mode) {
@@ -1028,7 +1032,7 @@ static gboolean vfo_configure_event_cb (GtkWidget         *widget,
   /* Initialize the surface to black */
   cairo_t *cr;
   cr = cairo_create (vfo_surface);
-  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+  cairo_set_source_rgba(cr, COLOUR_VFO_BACKGND);
   cairo_paint (cr);
   cairo_destroy(cr);
   g_idle_add(ext_vfo_update,NULL);
@@ -1055,7 +1059,7 @@ void vfo_update() {
         char temp_text[32];
         cairo_t *cr;
         cr = cairo_create (vfo_surface);
-        cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+        cairo_set_source_rgba(cr, COLOUR_VFO_BACKGND);
         cairo_paint (cr);
 
         cairo_select_font_face(cr, DISPLAY_FONT,
@@ -1088,7 +1092,7 @@ void vfo_update() {
             break;
         }
         cairo_set_font_size(cr, DISPLAY_FONT_SIZE2);
-        cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+        cairo_set_source_rgba(cr, COLOUR_ATTN);
         cairo_move_to(cr, 5, 15);
         cairo_show_text(cr, temp_text);
 
@@ -1146,14 +1150,14 @@ void vfo_update() {
         sprintf(temp_text,"VFO A: %0lld.%06lld",af/(long long)1000000,af%(long long)1000000);
         if(txvfo == 0 && (isTransmitting() || oob)) {
             if (oob) sprintf(temp_text,"VFO A: Out of band");
-            cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
             if(vfo[0].entering_frequency) {
-              cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_ATTN);
             } else if(id==0) {
-              cairo_set_source_rgb(cr, 0.0, 1.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_OK);
             } else {
-              cairo_set_source_rgb(cr, 0.0, 0.65, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_OK_WEAK);
             }
         }
         cairo_move_to(cr, 5, 38);
@@ -1163,14 +1167,14 @@ void vfo_update() {
         sprintf(temp_text,"VFO B: %0lld.%06lld",bf/(long long)1000000,bf%(long long)1000000);
         if(txvfo == 1 && (isTransmitting() || oob)) {
             if (oob) sprintf(temp_text,"VFO B: Out of band");
-            cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
             if(vfo[1].entering_frequency) {
-              cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_ATTN);
             } else if(id==1) {
-              cairo_set_source_rgb(cr, 0.0, 1.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_OK);
             } else {
-              cairo_set_source_rgb(cr, 0.0, 0.65, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_OK_WEAK);
             }
         }
         cairo_move_to(cr, 300, 38);
@@ -1180,9 +1184,9 @@ void vfo_update() {
         if(can_transmit) {
           cairo_move_to(cr, 120, 50);
           if(transmitter->puresignal) {
-            cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
           } else {
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+            cairo_set_source_rgba(cr, COLOUR_SHADE);
           }
           cairo_set_font_size(cr, DISPLAY_FONT_SIZE2);
           cairo_show_text(cr, "PS");
@@ -1191,18 +1195,18 @@ void vfo_update() {
 
         cairo_move_to(cr, 55, 50);
         if(active_receiver->zoom>1) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_set_font_size(cr, DISPLAY_FONT_SIZE2);
         sprintf(temp_text,"Zoom x%d",active_receiver->zoom);
         cairo_show_text(cr, temp_text);
 
         if(vfo[id].rit_enabled==0) {
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+            cairo_set_source_rgba(cr, COLOUR_SHADE);
         } else {
-            cairo_set_source_rgb(cr, 0.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
         }
         sprintf(temp_text,"RIT: %lldHz",vfo[id].rit);
         cairo_move_to(cr, 170, 15);
@@ -1212,9 +1216,9 @@ void vfo_update() {
 
         if(can_transmit) {
           if(transmitter->xit_enabled==0) {
-              cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+              cairo_set_source_rgba(cr, COLOUR_SHADE);
           } else {
-              cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_ATTN);
           }
           sprintf(temp_text,"XIT: %lldHz",transmitter->xit);
           cairo_move_to(cr, 310, 15);
@@ -1227,65 +1231,65 @@ void vfo_update() {
 	// some space
         cairo_move_to(cr, 145, 50);
         if(active_receiver->nb) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
           cairo_show_text(cr, "NB");
         } else if (active_receiver->nb2) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
           cairo_show_text(cr, "NB2");
 	} else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
           cairo_show_text(cr, "NB");
         }
 
 	// NR and NR2 are mutually exclusive
         cairo_move_to(cr, 175, 50);
         if(active_receiver->nr) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
           cairo_show_text(cr, "NR");
         } else if (active_receiver->nr2) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
           cairo_show_text(cr, "NR2");
 	} else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
           cairo_show_text(cr, "NR");
         }
 
         cairo_move_to(cr, 200, 50);
         if(active_receiver->anf) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "ANF");
 
         cairo_move_to(cr, 230, 50);
         if(active_receiver->snb) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "SNB");
 
         cairo_move_to(cr, 265, 50);
         switch(active_receiver->agc) {
           case AGC_OFF:
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+            cairo_set_source_rgba(cr, COLOUR_SHADE);
             cairo_show_text(cr, "AGC OFF");
             break;
           case AGC_LONG:
-            cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
             cairo_show_text(cr, "AGC LONG");
             break;
           case AGC_SLOW:
-            cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
             cairo_show_text(cr, "AGC SLOW");
             break;
           case AGC_MEDIUM:
-            cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
             cairo_show_text(cr, "AGC MED");
             break;
           case AGC_FAST:
-            cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ATTN);
             cairo_show_text(cr, "AGC FAST");
             break;
         }
@@ -1298,10 +1302,10 @@ void vfo_update() {
           cairo_move_to(cr, 335, 50);
   	  if (transmitter->compressor) {
               sprintf(temp_text,"CMPR %d",(int) transmitter->compressor_level);
-              cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+              cairo_set_source_rgba(cr, COLOUR_ATTN);
               cairo_show_text(cr, temp_text);
 	  } else {
-              cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+              cairo_set_source_rgba(cr, COLOUR_SHADE);
               cairo_show_text(cr, "CMPR");
 	  }
         }
@@ -1310,17 +1314,17 @@ void vfo_update() {
         //
         cairo_move_to(cr, 400, 50);
         if ((isTransmitting() && enable_tx_equalizer) || (!isTransmitting() && enable_rx_equalizer)) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "EQ");
 
         cairo_move_to(cr, 500, 50);
         if(diversity_enabled) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "DIV");
 
@@ -1332,56 +1336,56 @@ void vfo_update() {
 
         sprintf(temp_text,"Step %s",step_labels[s]);
         cairo_move_to(cr, 400, 15);
-        cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+        cairo_set_source_rgba(cr, COLOUR_ATTN);
         cairo_show_text(cr, temp_text);
 
         cairo_move_to(cr, 425, 50);
         if(vfo[id].ctun) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "CTUN");
 
         cairo_move_to(cr, 468, 50);
         if(cat_control>0) {
-          cairo_set_source_rgb(cr, 1.0, 1.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ATTN);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "CAT");
 
         if(can_transmit) {
           cairo_move_to(cr, 500, 15);
           if(vox_enabled) {
-            cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ALARM);
           } else {
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+            cairo_set_source_rgba(cr, COLOUR_SHADE);
           }
           cairo_show_text(cr, "VOX");
         }
 
         cairo_move_to(cr, 5, 50);
         if(locked) {
-          cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "Locked");
 
         cairo_move_to(cr, 265, 15);
         if(split) {
-          cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         cairo_show_text(cr, "Split");
 
         cairo_move_to(cr, 265, 27);
         if(sat_mode!=SAT_NONE) {
-          cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+          cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
-          cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+          cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         if(sat_mode==SAT_NONE || sat_mode==SAT_MODE) {
           cairo_show_text(cr, "SAT");
@@ -1391,9 +1395,9 @@ void vfo_update() {
 
 
         if(duplex) {
-            cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+            cairo_set_source_rgba(cr, COLOUR_ALARM);
         } else {
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+            cairo_set_source_rgba(cr, COLOUR_SHADE);
         }
         sprintf(temp_text,"DUP");
         cairo_move_to(cr, 265, 39);
@@ -1530,22 +1534,22 @@ void vfo_set_frequency(int v,long long f) {
     //
     if (receivers == 2) {
       receiver_set_frequency(receiver[1], f);
-  } else {
-    vfo[v].frequency=f;
-    if (vfo[v].ctun) {
-      vfo[v].ctun=FALSE;
-      vfo[v].offset=0;
-      vfo[v].ctun_frequency=vfo[v].frequency;
-    }
+    } else {
+      vfo[v].frequency=f;
+      if (vfo[v].ctun) {
+        vfo[v].ctun=FALSE;
+        vfo[v].offset=0;
+        vfo[v].ctun_frequency=vfo[v].frequency;
+      }
     }
   }
   g_idle_add(ext_vfo_update, NULL);
 }
+
 //
 // Set CTUN state of a VFO
 //
 void vfo_ctun_update(int id,int state) {
-  long long f;
   //
   // Note: if this VFO does not control a (running) receiver,
   //       receiver_set_frequency is *not* called therefore

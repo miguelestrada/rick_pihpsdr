@@ -104,6 +104,7 @@ void switch_menu(GtkWidget *parent) {
 
   if(controller==NO_CONTROLLER || controller==CONTROLLER1) {
     notebook=gtk_notebook_new();
+    set_backgnd(notebook);
   }
  
 next_function_set:
@@ -178,7 +179,6 @@ next_function_set:
     gtk_widget_set_name(widget,"small_button");
     g_signal_connect(widget,"button-press-event",G_CALLBACK(switch_cb),GINT_TO_POINTER(6));
     gtk_grid_attach(GTK_GRID(grid),widget,col,row,1,1);
-    col++;
 
     row=original_row;
     col=8;
@@ -233,7 +233,6 @@ next_function_set:
 
     gtk_container_add(GTK_CONTAINER(content),grid);
   } else {
-    int start_row=row;
     for(int i=0;i<max_switches;i++) {
       if((controller==NO_CONTROLLER || controller==CONTROLLER1) && (temp_switches[i].switch_function==FUNCTION)) {
         widget=gtk_button_new_with_label(ActionTable[temp_switches[i].switch_function].str);

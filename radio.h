@@ -26,16 +26,6 @@
 #include "receiver.h"
 #include "transmitter.h"
 
-//
-// Fonts and sizes for VFO, meter, panadapter etc.
-//
-#define DISPLAY_FONT "FreeSans"   // FreeMono in original piHPSDR
-#define DISPLAY_FONT_SIZE1 10     // sizes are as in original piHPSDR
-#define DISPLAY_FONT_SIZE2 12
-#define DISPLAY_FONT_SIZE3 16
-#define DISPLAY_FONT_SIZE4 22
-
-#define SLIDERS_FONT "FreeSans Bold 10"   // Used for description in the sliders/zoompan area
 
 #define NEW_MIC_IN 0x00
 #define NEW_LINE_IN 0x01
@@ -373,6 +363,7 @@ extern void set_filter_size(int filter_size);
 extern void radio_change_region(int region);
 
 extern void disable_rigctl(void);
+extern void set_backgnd(GtkWidget *widget);
 
 #ifdef CLIENT_SERVER
 extern int remote_start(void *data);

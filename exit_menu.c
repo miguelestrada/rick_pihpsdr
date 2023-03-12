@@ -51,6 +51,7 @@ static void cleanup() {
   }
 }
 
+#if 0
 static gboolean discovery_cb (GtkWidget *widget, GdkEventButton *event, gpointer data) {
   cleanup();
 #ifdef GPIO
@@ -77,6 +78,7 @@ static gboolean discovery_cb (GtkWidget *widget, GdkEventButton *event, gpointer
   discovery();
   return TRUE;
 }
+#endif
 
 static gboolean close_cb (GtkWidget *widget, GdkEventButton *event, gpointer data) {
   cleanup();
@@ -135,7 +137,7 @@ static gboolean reboot_cb (GtkWidget *widget, GdkEventButton *event, gpointer da
 #endif
   }
   radioSaveState();
-  int rc=system("reboot");
+  (void) system("reboot");
   _exit(0);
 }
 
@@ -157,7 +159,7 @@ static gboolean shutdown_cb (GtkWidget *widget, GdkEventButton *event, gpointer 
 #endif
   }
   radioSaveState();
-  int rc=system("shutdown -h -P now");
+  (void) system("shutdown -h -P now");
   _exit(0);
 }
 
@@ -171,12 +173,7 @@ void exit_menu(GtkWidget *parent) {
   gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - Exit");
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
 
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -196,13 +193,13 @@ void exit_menu(GtkWidget *parent) {
   row++;
   col=0;
 
-/*
+#if 0
   GtkWidget *discovery_b=gtk_button_new_with_label("Discovery");
   g_signal_connect (discovery_b, "pressed", G_CALLBACK(discovery_cb), NULL);
   gtk_grid_attach(GTK_GRID(grid),discovery_b,col,row,1,1);
 
   col++;
-*/
+#endif
   GtkWidget *exit_b=gtk_button_new_with_label("Exit");
   g_signal_connect (exit_b, "pressed", G_CALLBACK(exit_cb), NULL);
   gtk_grid_attach(GTK_GRID(grid),exit_b,col,row,1,1);

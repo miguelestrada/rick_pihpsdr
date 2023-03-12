@@ -107,7 +107,6 @@ static void rx_gain_value_changed_cb(GtkWidget *widget, gpointer data) {
 }
 
 static void drive_gain_value_changed_cb(GtkWidget *widget, gpointer data) {
-  DAC *dac=(DAC *)data;
   if(radio->device==SOAPYSDR_USB_DEVICE) {
     // should use setDrive here to move the main drive slider
     transmitter->drive=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(widget));
@@ -122,12 +121,12 @@ static void drive_gain_value_changed_cb(GtkWidget *widget, gpointer data) {
 }
 
 static void tx_gain_value_changed_cb(GtkWidget *widget, gpointer data) {
-  DAC *dac=(DAC *)data;
   int gain;
   if(radio->device==SOAPYSDR_USB_DEVICE) {
     gain=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(widget));
     soapy_protocol_set_tx_gain_element(transmitter,(char *)gtk_widget_get_name(widget),gain);
 /*
+    DAC *dac=(DAC *)data;
     for(int i=0;i<radio->info.soapy.tx_gains;i++) {
       if(strcmp(radio->info.soapy.tx_gain[i],(char *)gtk_widget_get_name(widget))==0) {
         dac[0].tx_gain[i]=gain;
@@ -140,7 +139,6 @@ static void tx_gain_value_changed_cb(GtkWidget *widget, gpointer data) {
 
 
 static void agc_changed_cb(GtkWidget *widget, gpointer data) {
-  ADC *adc=(ADC *)data;
   gboolean agc=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
   soapy_protocol_set_automatic_gain(active_receiver,agc);
   if(!agc) {
@@ -443,13 +441,7 @@ void radio_menu(GtkWidget *parent) {
   //gtk_window_set_decorated(GTK_WINDOW(dialog),FALSE);
   gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - Radio");
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
-
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -913,7 +905,6 @@ void radio_menu(GtkWidget *parent) {
   }
 
   row++;
-
   if(row>temp_row) temp_row=row;
 
 #ifdef SOAPYSDR
@@ -990,7 +981,6 @@ void radio_menu(GtkWidget *parent) {
       gtk_grid_attach(GTK_GRID(grid),agc,col,row,1,1);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(agc),adc[0].agc);
       g_signal_connect(agc,"toggled",G_CALLBACK(agc_changed_cb),&adc[0]);
-      row++;
     }
 
     row=temp_row;

@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "appearance.h"
 #include "receiver.h"
 #include "sliders.h"
 #include "mode.h"
@@ -89,8 +90,6 @@ static GtkWidget *filter_shift_scale;
 static GtkWidget *diversity_gain_scale;
 static GtkWidget *diversity_phase_scale;
 
-static GdkRGBA white;
-static GdkRGBA gray;
 
 void sliders_update() {
   if(display_sliders) {
@@ -875,6 +874,7 @@ fprintf(stderr,"sliders_init: width=%d height=%d\n", width,height);
   gtk_widget_set_size_request (sliders, width, height);
   gtk_grid_set_row_homogeneous(GTK_GRID(sliders), FALSE);
   gtk_grid_set_column_homogeneous(GTK_GRID(sliders),TRUE);
+  set_backgnd(sliders);
 
   af_gain_label=gtk_label_new("AF:");
   gtk_widget_override_font(af_gain_label, pango_font_description_from_string(SLIDERS_FONT));

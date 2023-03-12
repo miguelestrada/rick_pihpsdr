@@ -113,10 +113,10 @@ static void waterfall_automatic_cb(GtkWidget *widget, gpointer data) {
   active_receiver->waterfall_automatic=active_receiver->waterfall_automatic==1?0:1;
 }
 
-static void display_panadapter_cb(GtkWidget *widget, gpointer data) {
-  active_receiver->display_panadapter=active_receiver->display_panadapter==1?0:1;
-  reconfigure_radio();
-}
+//static void display_panadapter_cb(GtkWidget *widget, gpointer data) {
+//  active_receiver->display_panadapter=active_receiver->display_panadapter==1?0:1;
+//  reconfigure_radio();
+//}
 
 static void display_waterfall_cb(GtkWidget *widget, gpointer data) {
   active_receiver->display_waterfall=active_receiver->display_waterfall==1?0:1;
@@ -152,12 +152,7 @@ void display_menu(GtkWidget *parent) {
   gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - Display");
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
 
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 

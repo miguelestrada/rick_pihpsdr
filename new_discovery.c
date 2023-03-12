@@ -127,6 +127,9 @@ static void new_discover(struct ifaddrs* iface, int discflag) {
 	// prepeare socket for sending an UDP broadcast packet to interface ifa
 	//
 	strcpy(interface_name,iface->ifa_name);
+        // hack to ignore Docker interfaces
+        if(!strncmp("veth", interface_name, 4) || !strncmp("dock", interface_name, 4) || !strncmp("hass", interface_name, 4))
+            return;
 	fprintf(stderr,"new_discover: looking for HPSDR devices on %s\n",interface_name);
 
 	// send a broadcast to locate metis boards on the network

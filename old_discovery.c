@@ -75,6 +75,9 @@ static void discover(struct ifaddrs* iface, int discflag) {
 	// Send METIS discovery packet to broadcast address on interface iface
 	//
         strcpy(interface_name,iface->ifa_name);
+        // hack to ignore Docker interfaces
+        if(!strncmp("veth", interface_name, 4) || !strncmp("dock", interface_name, 4) || !strncmp("hass", interface_name, 4))
+            return;
         fprintf(stderr,"discover: looking for HPSDR devices on %s\n", interface_name);
 
         // send a broadcast to locate hpsdr boards on the network

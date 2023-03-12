@@ -32,6 +32,7 @@
 
 #include <wdsp.h>
 
+#include "appearance.h"
 #include "adc.h"
 #include "dac.h"
 #include "audio.h"
@@ -371,6 +372,16 @@ gint sequence_errors=0;
 
 gint rx_height;
 
+//
+// This is used to over-ride the background of a widget.
+// If ALLOW_DARK_THEME is set, don't do that!
+// 
+void set_backgnd(GtkWidget *widget) {
+   static GdkRGBA BackGroundColour = {COLOUR_MENU_BACKGND};
+#ifndef ALLOW_DARK_THEME
+   gtk_widget_override_background_color(widget,GTK_STATE_FLAG_NORMAL,&BackGroundColour);
+#endif
+}
 void radio_stop() {
   if(can_transmit) {
 g_print("radio_stop: TX: CloseChannel: %d\n",transmitter->id);
@@ -668,7 +679,6 @@ if(!radio_is_remote) {
   if(display_toolbar) {
     toolbar = toolbar_init(display_width,TOOLBAR_HEIGHT,top_window);
     gtk_fixed_put(GTK_FIXED(fixed),toolbar,0,y);
-    y+=TOOLBAR_HEIGHT;
   }
 
 //
@@ -2872,7 +2882,7 @@ int remote_start(void *data) {
   g_idle_add(ext_vfo_update,(gpointer)NULL);
   gdk_window_set_cursor(gtk_widget_get_window(top_window),gdk_cursor_new(GDK_ARROW));
   for(int i=0;i<receivers;i++) {
-    gint timer_id=gdk_threads_add_timeout_full(G_PRIORITY_DEFAULT_IDLE,100, start_spectrum, receiver[i], NULL);
+    (void) gdk_threads_add_timeout_full(G_PRIORITY_DEFAULT_IDLE,100, start_spectrum, receiver[i], NULL);
   }
   start_vfo_timer();
   remote_started=TRUE;

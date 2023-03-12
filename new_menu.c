@@ -421,15 +421,6 @@ static gboolean ps_cb (GtkWidget *widget, GdkEventButton *event, gpointer data) 
 }
 #endif
 
-void start_test() {
-  cleanup();
-  test_menu(top_window);
-}
-
-static gboolean test_cb (GtkWidget *widget, GdkEventButton *event, gpointer data) {
-  start_test();
-  return TRUE;
-}
 
 #ifdef CLIENT_SERVER
 void start_server() {
@@ -472,12 +463,7 @@ void new_menu()
     gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - Menu");
     g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
 
-    GdkRGBA color;
-    color.red = 1.0;
-    color.green = 1.0;
-    color.blue = 1.0;
-    color.alpha = 1.0;
-    gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+    set_backgnd(dialog);
 
     GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -678,7 +664,6 @@ void new_menu()
     GtkWidget *about_b=gtk_button_new_with_label("About");
     g_signal_connect (about_b, "button-press-event", G_CALLBACK(about_b_cb), NULL);
     gtk_grid_attach(GTK_GRID(grid),about_b,(i%5),i/5,1,1);
-    i++;
 
     gtk_container_add(GTK_CONTAINER(content),grid);
 

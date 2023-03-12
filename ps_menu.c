@@ -395,13 +395,7 @@ void ps_menu(GtkWidget *parent) {
   //gtk_window_set_decorated(GTK_WINDOW(dialog),FALSE);
   gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - Pure Signal");
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
-
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -512,7 +506,6 @@ void ps_menu(GtkWidget *parent) {
   gtk_widget_show(ps_ant_ext2);
   gtk_grid_attach(GTK_GRID(grid), ps_ant_ext2, col, row, 1, 1);
   g_signal_connect(ps_ant_ext2,"toggled", G_CALLBACK(ps_ant_cb), (gpointer) (long) 7);
-  col++;
 
   row++;
 

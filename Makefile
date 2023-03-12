@@ -22,8 +22,11 @@ PURESIGNAL_INCLUDE=PURESIGNAL
 # uncomment the line below to include MIDI support
 MIDI_INCLUDE=MIDI
 
+# uncomment the line below to include SATURN support
+#SATURN_INCLUDE=SATURN
+
 # uncomment the line below to include ANDROMEDA support
-ANDROMEDA_INCLUDE=ANDROMEDA
+ANDROMEDA_OPTIONS=-D ANDROMEDA
 
 # uncomment the line below to include USB Ozy support
 # USBOZY_INCLUDE=USBOZY
@@ -73,10 +76,6 @@ MIDI_LIBS= -lasound
 endif
 endif
 
-ifeq ($(ANDROMEDA_INCLUDE),ANDROMEDA)
-MIDI_OPTIONS=-D ANDROMEDA
-endif
-
 ifeq ($(PURESIGNAL_INCLUDE),PURESIGNAL)
 PURESIGNAL_OPTIONS=-D PURESIGNAL
 PURESIGNAL_SOURCES= \
@@ -85,6 +84,40 @@ PURESIGNAL_HEADERS= \
 ps_menu.h
 PURESIGNAL_OBJS= \
 ps_menu.o
+endif
+
+ifeq ($(SATURN_INCLUDE),SATURN)
+VPATH=.:SATURN
+SATURN_OPTIONS=-D SATURN
+SATURN_SOURCES= \
+codecwrite.c \
+debugaids.c \
+hwaccess.c \
+saturndrivers.c \
+saturnregisters.c \
+saturnmain.c \
+saturnversion.c \
+generalpacket.c
+SATURN_HEADERS= \
+codecwrite.h \
+debugaids.h \
+hwaccess.h \
+saturndrivers.h \
+saturnregisters.h \
+saturntypes.h \
+saturnversion.h \
+saturnthreaddata.h \
+generalpacket.h \
+xiic_regdefs.h
+SATURN_OBJS= \
+codecwrite.o \
+debugaids.o \
+hwaccess.o \
+saturndrivers.o \
+saturnregisters.o \
+saturnmain.o \
+saturnversion.o \
+generalpacket.o
 endif
 
 ifeq ($(REMOTE_INCLUDE),REMOTE)
@@ -224,7 +257,7 @@ AUDIO_OBJS=portaudio.o
 endif
 
 OPTIONS=$(SMALL_SCREEN_OPTIONS) $(MIDI_OPTIONS) $(ANDROMEDA_OPTIONS) $(PURESIGNAL_OPTIONS) $(REMOTE_OPTIONS) $(USBOZY_OPTIONS) \
-	$(GPIO_OPTIONS) $(SOAPYSDR_OPTIONS) $(LOCALCW_OPTIONS) \
+	$(GPIO_OPTIONS) $(SOAPYSDR_OPTIONS) $(LOCALCW_OPTIONS) $(SATURN_OPTIONS) \
 	$(STEMLAB_OPTIONS) \
 	$(SERVER_OPTIONS) \
 	$(AUDIO_OPTIONS) \
@@ -285,7 +318,6 @@ fft_menu.c \
 diversity_menu.c \
 tx_menu.c \
 vfo_menu.c \
-test_menu.c \
 meter.c \
 mode.c \
 old_discovery.c \
@@ -308,7 +340,6 @@ vfo.c \
 waterfall.c \
 button_text.c \
 vox.c \
-update.c \
 store.c \
 store_menu.c \
 memory.c \
@@ -366,7 +397,6 @@ fft_menu.h \
 diversity_menu.h \
 tx_menu.h \
 vfo_menu.h \
-test_menu.h \
 meter.h \
 mode.h \
 old_discovery.h \
@@ -389,7 +419,6 @@ vfo.h \
 waterfall.h \
 button_text.h \
 vox.h \
-update.h \
 store.h \
 store_menu.h \
 memory.h \
@@ -444,7 +473,6 @@ fft_menu.o \
 diversity_menu.o \
 tx_menu.o \
 vfo_menu.o \
-test_menu.o \
 meter.o \
 mode.o \
 old_discovery.o \
@@ -466,7 +494,6 @@ vfo.o \
 waterfall.o \
 button_text.o \
 vox.o \
-update.o \
 store.o \
 store_menu.o \
 memory.o \
@@ -487,18 +514,18 @@ toolbar_menu.o \
 sintab.o
 
 $(PROGRAM):  $(OBJS) $(AUDIO_OBJS) $(REMOTE_OBJS) $(USBOZY_OBJS) $(SOAPYSDR_OBJS) \
-		$(LOCALCW_OBJS) $(PURESIGNAL_OBJS) \
+		$(LOCALCW_OBJS) $(PURESIGNAL_OBJS) $(SATURN_OBJS) \
 		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS)
 	$(LINK) -o $(PROGRAM) $(OBJS) $(AUDIO_OBJS) $(REMOTE_OBJS) $(USBOZY_OBJS) \
-		$(SOAPYSDR_OBJS) $(LOCALCW_OBJS) $(PURESIGNAL_OBJS) \
+		$(SOAPYSDR_OBJS) $(LOCALCW_OBJS) $(PURESIGNAL_OBJS) $(SATURN_OBJS) \
 		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS) $(LIBS)
 
 .PHONY:	all
 all:	prebuild  $(PROGRAM) $(HEADERS) $(AUDIO_HEADERS) $(USBOZY_HEADERS) $(SOAPYSDR_HEADERS) \
-	$(LOCALCW_HEADERS) \
+	$(LOCALCW_HEADERS) $(SATURN_HEADERS) \
 	$(PURESIGNAL_HEADERS) $(MIDI_HEADERS) $(STEMLAB_HEADERS) $(SERVER_HEADERS) \
 	$(AUDIO_SOURCES) $(SOURCES) \
-	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) $(LOCALCW_SOURCE) \
+	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) $(LOCALCW_SOURCE) $(SATURN_SOURCES) \
 	$(PURESIGNAL_SOURCES) $(MIDI_SOURCES) $(STEMLAB_SOURCES) $(SERVER_SOURCES)
 
 .PHONY:	prebuild
@@ -520,7 +547,7 @@ CPPINCLUDES:=$(shell echo $(INCLUDES) | sed -e "s/-pthread / /" )
 .PHONY:	cppcheck
 cppcheck:
 	cppcheck $(CPPOPTIONS) $(OPTIONS) $(CPPINCLUDES) $(AUDIO_SOURCES) $(SOURCES) $(REMOTE_SOURCES) \
-	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) \
+	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) $(SATURN_SOURCES) \
 	$(PURESIGNAL_SOURCES) $(MIDI_SOURCES) $(STEMLAB_SOURCES) $(LOCALCW_SOURCES) \
 	$(SERVER_SOURCES)
 

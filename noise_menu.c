@@ -165,13 +165,7 @@ void noise_menu(GtkWidget *parent) {
   sprintf(title,"piHPSDR - Noise (RX %d VFO %s)",active_receiver->id,active_receiver->id==0?"A":"B");
   gtk_window_set_title(GTK_WINDOW(dialog),title);
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
-
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 

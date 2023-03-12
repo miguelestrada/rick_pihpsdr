@@ -210,17 +210,12 @@ void pa_menu(GtkWidget *parent) {
   //gtk_window_set_decorated(GTK_WINDOW(dialog),FALSE);
   gtk_window_set_title(GTK_WINDOW(dialog),"piHPSDR - PA Calibration");
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
-
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
   GtkWidget *notebook=gtk_notebook_new();
+  set_backgnd(notebook);
 
   GtkWidget *grid0=gtk_grid_new();
   gtk_grid_set_column_spacing (GTK_GRID(grid0),10);

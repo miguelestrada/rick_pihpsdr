@@ -55,6 +55,7 @@
 #include "noise_menu.h"
 #include "old_protocol.h"
 #include "new_protocol.h"
+#include "new_menu.h"
 #ifdef LOCALCW
 #include "iambic.h"              // declare keyer_update()
 #endif

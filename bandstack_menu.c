@@ -76,7 +76,7 @@ static gboolean bandstack_select_cb (GtkWidget *widget, gpointer        data) {
     gtk_button_set_label(GTK_BUTTON(last_bandstack), label);
   }
 
-  set_button_text_color(last_bandstack,"black");
+  set_button_text_color(last_bandstack,"default");
   last_bandstack=widget;
   set_button_text_color(last_bandstack,"orange");
   vfo_bandstack_changed(b);
@@ -96,12 +96,7 @@ void bandstack_menu(GtkWidget *parent) {
   gtk_window_set_title(GTK_WINDOW(dialog),title);
   g_signal_connect (dialog, "delete_event", G_CALLBACK (delete_event), NULL);
 
-  GdkRGBA color;
-  color.red = 1.0;
-  color.green = 1.0;
-  color.blue = 1.0;
-  color.alpha = 1.0;
-  gtk_widget_override_background_color(dialog,GTK_STATE_FLAG_NORMAL,&color);
+  set_backgnd(dialog);
 
   GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
@@ -130,7 +125,7 @@ void bandstack_menu(GtkWidget *parent) {
       sprintf(label,"%lld %s",entry->frequency,mode_string[entry->mode]);
     }
     GtkWidget *b=gtk_button_new_with_label(label);
-    set_button_text_color(b,"black");
+    set_button_text_color(b,"default");
     //gtk_widget_override_font(b, pango_font_description_from_string("Arial 20"));
     if(i==vfo[active_receiver->id].bandstack) {
       set_button_text_color(b,"orange");

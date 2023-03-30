@@ -89,7 +89,7 @@ int filter_select(void *data) {
 
 static gboolean filter_select_cb (GtkWidget *widget, gpointer        data) {
   filter_select(data);
-  set_button_text_color(last_filter,"black");
+  set_button_text_color(last_filter,"default");
   last_filter=widget;
   set_button_text_color(last_filter,"orange");
   return FALSE;
@@ -102,7 +102,7 @@ static gboolean deviation_select_cb (GtkWidget *widget, gpointer data) {
   tx_set_filter(transmitter);
   set_deviation(active_receiver);
   transmitter_set_deviation(transmitter);
-  set_button_text_color(last_filter,"black");
+  set_button_text_color(last_filter,"default");
   last_filter=widget;
   set_button_text_color(last_filter,"orange");
   g_idle_add(ext_vfo_update,NULL);
@@ -185,7 +185,7 @@ void filter_menu(GtkWidget *parent) {
         set_button_text_color(b,"orange");
         last_filter=b;
       } else {
-        set_button_text_color(b,"black");
+        set_button_text_color(b,"default");
       }
       g_signal_connect(b,"pressed",G_CALLBACK(deviation_select_cb),(gpointer)(long)2500);
       gtk_grid_attach(GTK_GRID(grid),b,1,1,1,1);
@@ -195,7 +195,7 @@ void filter_menu(GtkWidget *parent) {
         set_button_text_color(b,"orange");
         last_filter=b;
       } else {
-        set_button_text_color(b,"black");
+        set_button_text_color(b,"default");
       }
       g_signal_connect(b,"pressed",G_CALLBACK(deviation_select_cb),(gpointer)(long)5000);
       gtk_grid_attach(GTK_GRID(grid),b,2,1,1,1);
@@ -204,13 +204,12 @@ void filter_menu(GtkWidget *parent) {
 
     default:
       for(i=0;i<filterVar1;i++) {
-        FILTER* band_filter=&band_filters[i];
         GtkWidget *b=gtk_button_new_with_label(band_filters[i].title);
         if(i==vfo[active_receiver->id].filter) {
           set_button_text_color(b,"orange");
           last_filter=b;
         } else {
-          set_button_text_color(b,"black");
+          set_button_text_color(b,"default");
         }
         gtk_grid_attach(GTK_GRID(grid),b,i%5,1+(i/5),1,1);
         g_signal_connect(b,"pressed",G_CALLBACK(filter_select_cb),(gpointer)(long)i);
@@ -224,7 +223,7 @@ void filter_menu(GtkWidget *parent) {
         set_button_text_color(b,"orange");
         last_filter=b;
       } else {
-        set_button_text_color(b,"black");
+        set_button_text_color(b,"default");
       }
       gtk_grid_attach(GTK_GRID(grid),b,0,row,1,1);
       g_signal_connect(b,"pressed",G_CALLBACK(filter_select_cb),(gpointer)(long)i);
@@ -260,7 +259,7 @@ void filter_menu(GtkWidget *parent) {
         set_button_text_color(b,"orange");
         last_filter=b;
       } else {
-        set_button_text_color(b,"black");
+        set_button_text_color(b,"default");
       }
       gtk_grid_attach(GTK_GRID(grid),b,0,row,1,1);
       g_signal_connect(b,"pressed",G_CALLBACK(filter_select_cb),(gpointer)(long)i);

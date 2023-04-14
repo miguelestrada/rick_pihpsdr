@@ -770,6 +770,7 @@ void start_radio() {
           pa_power=PA_200W;
           break;
         case DEVICE_STEMLAB:
+        case DEVICE_STEMLAB_Z20:
           pa_power=PA_100W;
           break;
       }
@@ -799,6 +800,7 @@ void start_radio() {
           pa_power=PA_200W;
           break;
         case DEVICE_STEMLAB:
+        case DEVICE_STEMLAB_Z20:
           pa_power=PA_100W;
           break;
       }
@@ -1172,7 +1174,7 @@ void start_radio() {
     load_filters();  // Apply default OC settings for N2ADR board
   }
 
-  if (protocol == ORIGINAL_PROTOCOL && device == DEVICE_STEMLAB) {
+  if (protocol == ORIGINAL_PROTOCOL && (device == DEVICE_STEMLAB || device == DEVICE_STEMLAB_Z20)) {
     filter_board = CHARLY25;
   }
 
@@ -1598,7 +1600,8 @@ static void rxtx(int state) {
                  device == DEVICE_HERMES_LITE2 || 
                  device == DEVICE_HERMES_LITE ||
                  device == DEVICE_HERMES ||
-                 device == DEVICE_STEMLAB
+                 device == DEVICE_STEMLAB ||
+                 device == DEVICE_STEMLAB_Z20
                 )) {
         //
         // These systems get a significant "tail" of the RX feedback signal into the RX after TX/RX,

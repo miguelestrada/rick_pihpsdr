@@ -2569,7 +2569,7 @@ gboolean parse_extended_cmd (char *command,CLIENT *client) {
             static int steps=0;
             steps+=atoi(&command[4]);
             if(steps >= vfo_encoder_divisor) {
-              vfo_id_step((active_receiver->id==0)?VFO_A:VFO_B,-1);
+              vfo_id_step((active_receiver->id==0)?VFO_A:VFO_B,-steps/vfo_encoder_divisor);
               steps=0;
             }
           }
@@ -2888,7 +2888,7 @@ gboolean parse_extended_cmd (char *command,CLIENT *client) {
             static int steps=0;
             steps+=atoi(&command[4]);
             if(steps >= vfo_encoder_divisor) {
-              vfo_id_step((active_receiver->id==0)?VFO_A:VFO_B,1);
+              vfo_id_step((active_receiver->id==0)?VFO_A:VFO_B,steps/vfo_encoder_divisor);
               steps=0;
             }
           }

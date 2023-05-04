@@ -1252,6 +1252,7 @@ void start_radio() {
       break;
     case CONTROLLER2_V1:
     case CONTROLLER2_V2:
+    case G2_FRONTPANEL:
       display_zoompan=1;
       display_sliders=0;
       display_toolbar=0;
@@ -2839,6 +2840,7 @@ int remote_start(void *data) {
   switch(controller) {
     case CONTROLLER2_V1:
     case CONTROLLER2_V2:
+    case G2_FRONTPANEL:
       display_zoompan=1;
       display_sliders=0;
       display_toolbar=0;

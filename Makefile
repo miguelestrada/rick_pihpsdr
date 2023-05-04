@@ -13,6 +13,7 @@ GIT_VERSION := $(shell git describe --abbrev=0 --tags)
 #    CONTROLLER1 (Original Controller)
 #    CONTROLLER2_V1 single encoders with MCP23017 switches
 #    CONTROLLER2_V2 dual encoders with MCP23017 switches
+#    G2_FRONTPANEL dual encoders with MCP23017 switches
 #
 GPIO_INCLUDE=GPIO
 
@@ -20,7 +21,7 @@ GPIO_INCLUDE=GPIO
 MIDI_INCLUDE=MIDI
 
 # uncomment the line below to include ANDROMEDA support
-# ANDROMEDA_OPTIONS=-D ANDROMEDA
+ANDROMEDA_OPTIONS=-D ANDROMEDA
 
 # uncomment the line below to include USB Ozy support
 # USBOZY_INCLUDE=USBOZY

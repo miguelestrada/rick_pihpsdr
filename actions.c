@@ -629,6 +629,7 @@ int process_action(void *data) {
 	    break;
 	  case CONTROLLER2_V1:
 	  case CONTROLLER2_V2:
+	  case G2_FRONTPANEL:
             function++;
             if(function>=MAX_FUNCTIONS) {
               function=0;

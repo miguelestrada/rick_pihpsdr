@@ -88,6 +88,9 @@ void configure_gpio(GtkWidget *parent) {
     case CONTROLLER2_V2:
       max_encoders=5;
       break;
+    case G2_FRONTPANEL:
+      max_encoders=5;
+      break;
   }
 
   if (max_encoders > 0) {
@@ -113,11 +116,11 @@ void configure_gpio(GtkWidget *parent) {
   col++;
 
   widget=gtk_label_new(NULL);
-  gtk_label_set_markup (GTK_LABEL(widget), controller==CONTROLLER2_V2?"<b>Bottom Encoder</b>":"<b>Encoder</b>");
+  gtk_label_set_markup (GTK_LABEL(widget), (controller==CONTROLLER2_V2||controller==G2_FRONTPANEL)?"<b>Bottom Encoder</b>":"<b>Encoder</b>");
   gtk_grid_attach(GTK_GRID(grid),widget,col,row,2,1);
   col+=2;
 
-  if(controller==CONTROLLER2_V2) {
+  if(controller==CONTROLLER2_V2||controller==G2_FRONTPANEL) {
     widget=gtk_label_new(NULL);
     gtk_label_set_markup (GTK_LABEL(widget), "<b>Top Encoder</b>");
     gtk_grid_attach(GTK_GRID(grid),widget,col,row,2,1);
@@ -146,7 +149,7 @@ void configure_gpio(GtkWidget *parent) {
   gtk_grid_attach(GTK_GRID(grid),widget,col,row,1,1);
   col++;
 
-  if(controller==CONTROLLER2_V2) {
+  if(controller==CONTROLLER2_V2||controller==G2_FRONTPANEL) {
     widget=gtk_label_new(NULL);
     gtk_label_set_markup (GTK_LABEL(widget), "<b>Gpio A</b>");
     gtk_grid_attach(GTK_GRID(grid),widget,col,row,1,1);
@@ -184,7 +187,7 @@ void configure_gpio(GtkWidget *parent) {
     gtk_grid_attach(GTK_GRID(grid),widget,col,row,1,1);
     col++;
 
-    if(controller==CONTROLLER2_V2 && i<(max_encoders-1)) {
+    if((controller==CONTROLLER2_V2||controller==G2_FRONTPANEL) && i<(max_encoders-1)) {
       widget=gtk_spin_button_new_with_range (0.0,28.0,1.0);
       gtk_spin_button_set_value (GTK_SPIN_BUTTON(widget),encoders[i].top_encoder_address_a);
       gtk_grid_attach(GTK_GRID(grid),widget,col,row,1,1);
@@ -223,6 +226,9 @@ void configure_gpio(GtkWidget *parent) {
         max_switches=0;
         break;
       case CONTROLLER2_V2:
+        max_switches=0;
+        break;
+      case G2_FRONTPANEL:
         max_switches=0;
         break;
     }
@@ -275,7 +281,7 @@ void configure_gpio(GtkWidget *parent) {
     gtk_notebook_append_page(GTK_NOTEBOOK(notebook),grid,gtk_label_new("switches"));
   }
 
-  if(controller==CONTROLLER2_V1 || controller==CONTROLLER2_V2) {
+  if(controller==CONTROLLER2_V1 || controller==CONTROLLER2_V2 || controller==G2_FRONTPANEL) {
     char text[16];
     grid=gtk_grid_new();
     gtk_grid_set_column_homogeneous(GTK_GRID(grid),FALSE);

@@ -27,7 +27,8 @@ enum {
   NO_CONTROLLER,
   CONTROLLER1,
   CONTROLLER2_V1,
-  CONTROLLER2_V2
+  CONTROLLER2_V2,
+  G2_FRONTPANEL
 };
 
 extern gint controller;

@@ -21,7 +21,7 @@ GPIO_INCLUDE=GPIO
 MIDI_INCLUDE=MIDI
 
 # uncomment the line below to include ANDROMEDA support
-ANDROMEDA_OPTIONS=-D ANDROMEDA
+# ANDROMEDA_OPTIONS=-D ANDROMEDA
 
 # uncomment the line below to include USB Ozy support
 # USBOZY_INCLUDE=USBOZY

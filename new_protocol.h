@@ -97,4 +97,7 @@ extern void new_protocol_cw_audio_samples(short l, short r);
 
 extern void new_protocol_menu_start(void);
 extern void new_protocol_menu_stop(void);
+#ifdef SATURN
+void saturn_post_iq_data(int ddc, unsigned char *buffer);
+#endif
 #endif

@@ -253,6 +253,11 @@ void discovery() {
   }
 #endif
 
+#ifdef SATURN
+#include "saturnmain.h"
+  fprintf(stderr,"looking for /dev/xdma* based Saturn devices\n");
+  saturn_discovery();
+#endif
 #ifdef STEMLAB_DISCOVERY
   if(enable_stemlab && !discover_only_stemlab) {
 #ifdef NO_AVAHI
@@ -321,6 +326,11 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
         switch(d->protocol) {
           case ORIGINAL_PROTOCOL:
           case NEW_PROTOCOL:
+#ifdef SATURN
+            if(d->device==NEW_DEVICE_SATURN) {
+              sprintf(text,"%s (Protocol 2 SATURN SW:%s, FPGA:%08x) on %s",d->name,version,d->fpga_version,"/dev/xdma");
+            } else {
+#endif
 #ifdef USBOZY
             if(d->device==DEVICE_OZY) {
               sprintf(text,"%s (%s) on USB /dev/ozy", d->name, d->protocol==ORIGINAL_PROTOCOL?"Protocol 1":"Protocol 2");
@@ -338,7 +348,7 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
                             d->info.network.mac_address[4],
                             d->info.network.mac_address[5],
                             d->info.network.interface_name);
-#ifdef USBOZY
+#if defined (USBOZY) || defined (SATURN)
             }
 #endif
             break;

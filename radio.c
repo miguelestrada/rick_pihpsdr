@@ -81,6 +81,9 @@
 #ifdef CLIENT_SERVER
 #include "client_server.h"
 #endif
+#ifdef SATURN
+#include "saturnmain.h"
+#endif
 
 #define min(x,y) (x<y?x:y)
 #define max(x,y) (x<y?y:x)
@@ -791,6 +794,7 @@ void start_radio() {
         case NEW_DEVICE_HERMES_LITE2:
           pa_power=PA_10W;
           break;
+        case NEW_DEVICE_SATURN:
         case NEW_DEVICE_ORION2:
           pa_power=PA_200W;
           break;
@@ -998,11 +1002,19 @@ void start_radio() {
         sprintf(text,"%s (%s) on USB /dev/ozy\n", radio->name, p);
       } else {
 #endif
+#ifdef SATURN
+      if(device==NEW_DEVICE_SATURN) {
+        sprintf(text,"Starting %s (%s %s)",
+              radio->name,
+              "SATURN",
+              version);
+      } else {
+#endif
         sprintf(text,"Starting %s (%s %s)",
                       radio->name,
                       p,
                       version);
-#ifdef USBOZY
+#if defined (USBOZY) || defined (SATURN)
       }
 #endif
       break;
@@ -1021,6 +1033,14 @@ void start_radio() {
   switch (protocol) {
     case ORIGINAL_PROTOCOL:
     case NEW_PROTOCOL:
+#ifdef SATURN
+      if(device==NEW_DEVICE_SATURN) {
+        sprintf(text,"piHPSDR: %s (%s %s)",
+                   radio->name,
+                   p,
+                   version);
+      } else {
+#endif
       sprintf(text,"piHPSDR: %s (%s %s) %s (%s) on %s",
                    radio->name,
                    p,
@@ -1028,6 +1048,9 @@ void start_radio() {
                    ip,
                    mac,
                    iface);
+#ifdef SATURN
+      }
+#endif
       break;
 #ifdef SOAPYSDR
     case SOAPYSDR_PROTOCOL:
@@ -1037,6 +1060,7 @@ void start_radio() {
                    version);
       break;
 #endif
+
   }
 
   gtk_window_set_title (GTK_WINDOW (top_window), text);
@@ -1050,7 +1074,12 @@ void start_radio() {
       switch(device) {
 #ifdef USBOZY
         case DEVICE_OZY:
-          sprintf(property_path,"ozy.props");
+          sprintf(property_path,"%s.props",radio->name);
+          break;
+#endif
+#ifdef SATURN
+        case NEW_DEVICE_SATURN:
+          sprintf(property_path,"%s.props",radio->name);
           break;
 #endif
         default:
@@ -1086,6 +1115,7 @@ void start_radio() {
       break;
     case NEW_PROTOCOL:
       switch(device) {
+        case NEW_DEVICE_SATURN:
         case NEW_DEVICE_ORION2:
           //meter_calibration=3.0;
           //display_calibration=3.36;
@@ -1445,11 +1475,17 @@ g_print("radio_change_receivers: from %d to %d\n",receivers,r);
 	set_displaying(receiver[1],0);
 	gtk_container_remove(GTK_CONTAINER(fixed),receiver[1]->panel);
 	receivers=1;
+#ifdef SATURN // disable RX 2
+        if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(3, FALSE, 48000);
+#endif
 	break;
     case 2:
 	gtk_fixed_put(GTK_FIXED(fixed),receiver[1]->panel,0,0);
 	set_displaying(receiver[1],1);
 	receivers=2;
+#ifdef SATURN // enable RX 2
+        if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(3, TRUE, receiver[1]->sample_rate);
+#endif
 	//
 	// Make sure RX1 shares the sample rate  with RX0 when running P1.
 	//

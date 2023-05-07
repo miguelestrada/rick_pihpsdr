@@ -597,6 +597,7 @@ static gboolean update_display(gpointer data) {
             fwd_cal_offset=4;
             break;
           case NEW_DEVICE_ORION2:
+          case NEW_DEVICE_SATURN:
             constant1=5.0;
             constant2=0.08;
             fwd_cal_offset=18;

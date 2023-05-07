@@ -316,6 +316,11 @@ gpointer new_discover_receive_thread(gpointer data) {
                             frequency_min=0.0;
                             frequency_max=61440000.0;
                             break;
+			case NEW_DEVICE_SATURN:
+                            strcpy(discovered[devices].name,"Saturn");
+                            frequency_min=0.0;
+                            frequency_max=61440000.0;
+                            break;
 			case NEW_DEVICE_HERMES_LITE:
 			    if (discovered[devices].software_version < 40) {
                               strcpy(discovered[devices].name,"Hermes Lite V1");

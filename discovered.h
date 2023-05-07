@@ -53,6 +53,7 @@
 #define NEW_DEVICE_ORION           4
 #define NEW_DEVICE_ORION2          5
 #define NEW_DEVICE_HERMES_LITE     6
+#define NEW_DEVICE_SATURN          10
 #define NEW_DEVICE_HERMES_LITE2 1006
 
 #ifdef SOAPYSDR
@@ -96,6 +97,9 @@ struct _DISCOVERED {
     int use_routing;    // Radio connection is "routed" to some IP address
     char name[64];
     int software_version;
+#ifdef SATURN
+    int fpga_version;
+#endif
     int status;
     int supported_receivers;
     int supported_transmitters;

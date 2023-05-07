@@ -762,7 +762,7 @@ void *highprio_thread(void *data) {
 	fprintf(stderr,"HP: StepAtt0 = %d\n", stepatt0);
      }
      // rxatt0 depends both on ALEX att and Step Att, so re-calc. it each time
-     if (NEWDEVICE == NEW_DEVICE_ORION2) {
+     if (NEWDEVICE == NEW_DEVICE_ORION2 || NEWDEVICE == NEW_DEVICE_SATURN) {
 	// There is no step attenuator on ANAN7000
 	rxatt0_dbl=pow(10.0, -0.05*stepatt0);
      } else {

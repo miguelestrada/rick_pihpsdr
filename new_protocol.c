@@ -60,6 +60,9 @@
 #include "vox.h"
 #include "ext.h"
 #include "iambic.h"
+#ifdef SATURN
+#include "saturnmain.h"
+#endif
 
 #define min(x,y) (x<y?x:y)
 
@@ -333,7 +336,8 @@ void update_action_table() {
 
   int flag=0;
   int xmit=isTransmitting();  // store such that it cannot change while building the flag
-  int newdev=(device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2);
+  int newdev=(device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
+              device == NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN);
 
   if (duplex && xmit)			flag +=10000;
   if (newdev)				flag +=1000;
@@ -431,6 +435,46 @@ void new_protocol_init(int pixels) {
         transmitter->local_microphone=0;
       }
     }
+
+#ifdef SATURN
+    if(device==NEW_DEVICE_SATURN) {
+      start_saturn_receive_thread();
+
+      for(i=0;i<MAX_DDC;i++) {
+#ifdef __APPLE__
+        char sname[12];
+        sprintf(sname,"IQREADY%03d", i);
+        sem_unlink(sname);
+        iq_sem_ready[i]=sem_open(sname, O_CREAT | O_EXCL, 0700, 0);
+        if (iq_sem_ready[i] == SEM_FAILED) {
+          g_print("SEM=%s, ",sname);
+          perror("IQreadySemaphore");
+        }
+        sprintf(sname,"IQBUF%03d", i);
+        sem_unlink(sname);
+        iq_sem_buffer[i]=sem_open(sname, O_CREAT| O_EXCL, 0700, 0);
+        if (iq_sem_buffer[i] == SEM_FAILED) {
+          g_print("SEM=%s, ",sname);
+          perror("IQbufferSemaphore");
+        }
+#else
+        (void)sem_init(&iq_sem_ready[i], 0, 0); // check return value!
+        (void)sem_init(&iq_sem_buffer[i], 0, 0); // check return value!
+#endif
+        iq_thread_id[i] = g_thread_new( "iq thread", iq_thread, GINT_TO_POINTER(i));
+      }
+
+      new_protocol_timer_thread_id = g_thread_new( "new protocol timer", new_protocol_timer_thread, NULL);
+      if( ! new_protocol_timer_thread_id )
+      {
+          g_print("g_thread_new failed on new_protocol_timer_thread\n");
+          exit( -1 );
+      }
+      g_print( "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
+
+      return;
+    }
+#endif
 
 #ifdef __APPLE__
     sem_unlink("RESPONSE");
@@ -636,7 +680,7 @@ static void new_protocol_general() {
     }
 
     if(filter_board==ALEX) {
-      if(device==NEW_DEVICE_ORION2) {
+      if(device==NEW_DEVICE_ORION2 || device==NEW_DEVICE_SATURN) {
         general_buffer[59]=0x03;  // enable Alex 0 and 1
       } else {
         general_buffer[59]=0x01;  // enable Alex 0
@@ -646,6 +690,7 @@ static void new_protocol_general() {
 //g_print("Alex Enable=%02X\n",general_buffer[59]);
 //g_print("new_protocol_general: %s:%d\n",inet_ntoa(base_addr.sin_addr),ntohs(base_addr.sin_port));
 
+  if(device!=NEW_DEVICE_SATURN) {
     if((rc=sendto(data_socket,general_buffer,sizeof(general_buffer),0,(struct sockaddr*)&base_addr,base_addr_length))<0) {
         g_print("sendto socket failed for general\n");
         exit(1);
@@ -654,6 +699,7 @@ static void new_protocol_general() {
     if(rc!=sizeof(general_buffer)) {
       g_print("sendto socket for general: %d rather than %ld",rc,(long)sizeof(general_buffer));
     }
+  }
 
     general_sequence++;
     pthread_mutex_unlock(&general_mutex);
@@ -671,7 +717,7 @@ static void new_protocol_high_priority() {
     int ddc;
     int xmit, txvfo, txmode;
 
-    if(data_socket==-1) {
+    if(data_socket==-1 && device != NEW_DEVICE_SATURN) {
       return;
     }
 
@@ -751,7 +797,8 @@ static void new_protocol_high_priority() {
         // note that for HERMES, receiver[i] is associated with DDC(i) but beyond
         // (that is, ANGELIA, ORION, ORION2) receiver[i] is associated with DDC(i+2)
         ddc=0;
-        if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2) ddc=2;
+        if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
+            device == NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN) ddc=2;
 
         phase=(unsigned long)(((double)rx1Frequency)*34.952533333333333333333333333333);
 	high_priority_buffer_to_radio[ 9+(ddc*4)]=phase>>24;
@@ -759,6 +806,13 @@ static void new_protocol_high_priority() {
 	high_priority_buffer_to_radio[11+(ddc*4)]=phase>>8;
 	high_priority_buffer_to_radio[12+(ddc*4)]=phase;
 
+#ifdef SATURN
+    static int doonce=0; // workaround for sample_rate not taking in create receiver
+    if (device == NEW_DEVICE_SATURN) {
+      saturn_set_frequency(ddc, phase);
+      if(!doonce) saturn_set_sample_rate(ddc, TRUE, receiver[0]->sample_rate);
+    }
+#endif
         if (receivers > 1) {
           phase=(unsigned long)(((double)rx2Frequency)*34.952533333333333333333333333333);
 	  high_priority_buffer_to_radio[13+(ddc*4)]=phase>>24;
@@ -766,6 +820,13 @@ static void new_protocol_high_priority() {
 	  high_priority_buffer_to_radio[15+(ddc*4)]=phase>>8;
 	  high_priority_buffer_to_radio[16+(ddc*4)]=phase;
         }
+#ifdef SATURN
+    if (device == NEW_DEVICE_SATURN) {
+      saturn_set_frequency(ddc+1, phase);
+      if(!doonce) saturn_set_sample_rate(ddc+1, TRUE, receiver[1]->sample_rate);
+      doonce=1;
+    }
+#endif
     }
 
 //
@@ -841,7 +902,7 @@ static void new_protocol_high_priority() {
 //                  such that upon RX, Xvtr port is input, and on TX, Xvrt port
 //                  is output if the XVTR_OUT bit is set.
 //
-    if ((device==NEW_DEVICE_ORION2) && receiver[0]->alex_antenna == 5) {
+    if ((device==NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN) && receiver[0]->alex_antenna == 5) {
       high_priority_buffer_to_radio[1400] |= ANAN7000_XVTR_OUT;
     }
 
@@ -851,7 +912,7 @@ static void new_protocol_high_priority() {
     unsigned long alex0=0x00000000;
     unsigned  long alex1=0x00000000;
 
-    if (device != NEW_DEVICE_ORION2) {
+    if (device != NEW_DEVICE_ORION2 && device != NEW_DEVICE_SATURN) {
       //
       // ANAN7000 and 8000 do not have ALEX attenuators.
       // Even worse, ALEX0(14) bit used to control these attenuators
@@ -900,6 +961,7 @@ static void new_protocol_high_priority() {
 //
 
     switch(device) {
+      case NEW_DEVICE_SATURN:
       case NEW_DEVICE_ORION2:
 //
 //	new ANAN-7000/8000 band-pass RX filters
@@ -1000,7 +1062,7 @@ static void new_protocol_high_priority() {
 //                      in either case.
 //
     LPFfreq=txFrequency;
-    if (!xmit && device != NEW_DEVICE_ORION2 && receiver[0]->alex_antenna < 3) {
+    if (!xmit && (device != NEW_DEVICE_ORION2 || device != NEW_DEVICE_SATURN) && receiver[0]->alex_antenna < 3) {
 	LPFfreq = rx1Frequency;
         if (receivers > 1) {
           if (receiver[1]->adc == 0 && rx2Frequency > rx1Frequency) {
@@ -1037,7 +1099,7 @@ static void new_protocol_high_priority() {
     if (xmit && transmitter->puresignal) {
 	i=receiver[PS_RX_FEEDBACK]->alex_antenna;   	// 0, 6, or 7
     }
-    if (device == NEW_DEVICE_ORION2) {
+    if (device == NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN) {
       i +=100;
     } else if (new_pa_board) {
       // New-PA setting invalid on ANAN-7000,8000
@@ -1129,7 +1191,7 @@ static void new_protocol_high_priority() {
 
 //g_print("ALEX0 bits:  %02X %02X %02X %02X for rx=%lld tx=%lld\n",high_priority_buffer_to_radio[1432],high_priority_buffer_to_radio[1433],high_priority_buffer_to_radio[1434],high_priority_buffer_to_radio[1435],rxFrequency,txFrequency);
 
-    if (device == NEW_DEVICE_ORION2) {
+    if (device == NEW_DEVICE_ORION2|| device == NEW_DEVICE_SATURN) {
 
         high_priority_buffer_to_radio[1430]=(alex1>>8)&0xFF;
         high_priority_buffer_to_radio[1431]=alex1&0xFF;
@@ -1159,15 +1221,18 @@ static void new_protocol_high_priority() {
 //  Voila mes amis. Envoyons les 1444 octets "high priority" au radio
 //
 //g_print("new_protocol_high_priority: %s:%d\n",inet_ntoa(high_priority_addr.sin_addr),ntohs(high_priority_addr.sin_port));
-    int rc;
-    if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
-        g_print("sendto socket failed for high priority: rc=%d errno=%d\n",rc,errno);
-        abort();
-        //exit(1);
-    }
+    if (device == NEW_DEVICE_SATURN) {
+    } else {
+      int rc;
+      if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
+          g_print("sendto socket failed for high priority: rc=%d errno=%d\n",rc,errno);
+          abort();
+          //exit(1);
+      }
 
-    if(rc!=sizeof(high_priority_buffer_to_radio)) {
-      g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
+      if(rc!=sizeof(high_priority_buffer_to_radio)) {
+        g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
+      }
     }
 
     high_priority_sequence++;
@@ -1286,7 +1351,8 @@ static void new_protocol_receive_specific() {
 	// note that for HERMES, receiver[i] is associated with DDC(i) but beyond
 	// (that is, ANGELIA, ORION, ORION2) receiver[i] is associated with DDC(i+2)
         ddc=i;
-        if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2) ddc=2+i;
+        if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
+            device == NEW_DEVICE_ORION2|| device == NEW_DEVICE_SATURN) ddc=2+i;
         receive_specific_buffer[5]|=receiver[i]->dither<<ddc; // dither enable
         receive_specific_buffer[6]|=receiver[i]->random<<ddc; // random enable
 	if (!xmit && !diversity_enabled) {
@@ -1622,6 +1688,41 @@ g_print("mic_line_thread\n");
     mic_line_buffer->free=1;
   }
 }
+
+#ifdef SATURN
+// reuse the buffer from saturn side, skip semiphores and thread
+void saturn_post_iq_data(int ddc, unsigned char *buffer) {
+  long sequence;
+
+    process_iq_data(buffer,receiver[rxid[ddc]]);
+
+    sequence=((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
+    if(ddc_sequence[ddc] !=sequence) {
+      g_print("DDC %d sequence error: expected %ld got %ld\n",ddc,ddc_sequence[ddc],sequence);
+      ddc_sequence[ddc]=sequence;
+      sequence_errors++;
+    }
+    ddc_sequence[ddc]++;
+}
+
+void saturn_post_iq_data2(int ddc, unsigned char *buffer) {
+      mybuffer *mybuf;
+
+#ifdef __APPLE__
+                sem_wait(iq_sem_ready[ddc]);
+#else
+                sem_wait(&iq_sem_ready[ddc]);
+#endif
+                mybuf=get_my_buffer();
+                iq_buffer[ddc]=mybuf;
+                memcpy(iq_buffer[ddc]->buffer,buffer,1444);
+#ifdef __APPLE__
+                sem_post(iq_sem_buffer[ddc]);
+#else
+                sem_post(&iq_sem_buffer[ddc]);
+#endif
+}
+#endif
 
 static gpointer iq_thread(gpointer data) {
   int ddc=GPOINTER_TO_INT(data);
@@ -1994,7 +2095,8 @@ void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right
   //
   // Only process samples if NOT transmitting in CW
   //
-  if (isTransmitting() && (txmode==modeCWU || txmode==modeCWL)) return;
+  //RRK if (isTransmitting() && (txmode==modeCWU || txmode==modeCWL)) return;
+  return;
 
   pthread_mutex_lock(&audiob_mutex);
   // insert the samples

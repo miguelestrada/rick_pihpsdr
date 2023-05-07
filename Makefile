@@ -20,6 +20,9 @@ GPIO_INCLUDE=GPIO
 # uncomment the line below to include MIDI support
 MIDI_INCLUDE=MIDI
 
+# uncomment the line below to include SATURN support
+SATURN_INCLUDE=SATURN
+
 # uncomment the line below to include ANDROMEDA support
 # ANDROMEDA_OPTIONS=-D ANDROMEDA
 
@@ -68,6 +71,26 @@ MIDI_SOURCES= alsa_midi.c midi2.c midi3.c midi_menu.c
 MIDI_OBJS= alsa_midi.o midi2.o midi3.o midi_menu.o
 MIDI_LIBS= -lasound
 endif
+endif
+
+ifeq ($(SATURN_INCLUDE),SATURN)
+SATURN_OPTIONS=-D SATURN
+SATURN_SOURCES= \
+saturndrivers.c \
+saturnregisters.c \
+saturnmain.c \
+saturnversion.c
+SATURN_HEADERS= \
+saturndrivers.h \
+saturnregisters.h \
+saturntypes.h \
+saturnversion.h \
+saturnmain.h
+SATURN_OBJS= \
+saturndrivers.o \
+saturnregisters.o \
+saturnmain.o \
+saturnversion.o
 endif
 
 ifeq ($(USBOZY_INCLUDE),USBOZY)
@@ -195,6 +218,7 @@ endif
 
 OPTIONS=$(SMALL_SCREEN_OPTIONS) $(MIDI_OPTIONS) $(USBOZY_OPTIONS) \
 	$(GPIO_OPTIONS) $(SOAPYSDR_OPTIONS) $(LOCALCW_OPTIONS) \
+	$(SATURN_OPTIONS) \
 	$(ANDROMEDA_OPTIONS) \
 	$(STEMLAB_OPTIONS) \
 	$(SERVER_OPTIONS) \
@@ -455,15 +479,15 @@ sintab.o \
 ps_menu.o
 
 $(PROGRAM):  $(OBJS) $(AUDIO_OBJS) $(USBOZY_OBJS) $(SOAPYSDR_OBJS) $(LOCALCW_OBJS) \
-		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS)
+		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS) $(SATURN_OBJS)
 	$(LINK) -o $(PROGRAM) $(OBJS) $(AUDIO_OBJS) $(USBOZY_OBJS) $(SOAPYSDR_OBJS) $(LOCALCW_OBJS) \
-		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS) $(LIBS)
+		$(MIDI_OBJS) $(STEMLAB_OBJS) $(SERVER_OBJS) $(SATURN_OBJS) $(LIBS)
 
 .PHONY:	all
 all:	prebuild  $(PROGRAM) $(HEADERS) $(AUDIO_HEADERS) $(USBOZY_HEADERS) $(SOAPYSDR_HEADERS) \
-	$(LOCALCW_HEADERS) \
+	$(LOCALCW_HEADERS) $(SATURN_HEADERS) \
 	$(MIDI_HEADERS) $(STEMLAB_HEADERS) $(SERVER_HEADERS) $(AUDIO_SOURCES) $(SOURCES) \
-	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) $(LOCALCW_SOURCE) \
+	$(USBOZY_SOURCES) $(SOAPYSDR_SOURCES) $(LOCALCW_SOURCE) $(SATURN_SOURCES) \
 	$(MIDI_SOURCES) $(STEMLAB_SOURCES) $(SERVER_SOURCES)
 
 .PHONY:	prebuild
@@ -485,7 +509,7 @@ CPPINCLUDES:=$(shell echo $(INCLUDES) | sed -e "s/-pthread / /" )
 .PHONY:	cppcheck
 cppcheck:
 	cppcheck $(CPPOPTIONS) $(OPTIONS) $(CPPINCLUDES) $(AUDIO_SOURCES) $(SOURCES) $(USBOZY_SOURCES) \
-	$(SOAPYSDR_SOURCES) $(MIDI_SOURCES) $(STEMLAB_SOURCES) $(LOCALCW_SOURCES) $(SERVER_SOURCES)
+	$(SOAPYSDR_SOURCES) $(MIDI_SOURCES) $(STEMLAB_SOURCES) $(LOCALCW_SOURCES) $(SERVER_SOURCES) $(SATURN_SOURCES)
 
 .PHONY:	clean
 clean:

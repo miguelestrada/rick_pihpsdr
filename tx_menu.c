@@ -316,6 +316,7 @@ void tx_menu(GtkWidget *parent) {
         case NEW_DEVICE_ANGELIA:
         case NEW_DEVICE_ORION:
         case NEW_DEVICE_ORION2:
+        case NEW_DEVICE_SATURN:
           device_has_microphone_input=TRUE;
           break;
       }

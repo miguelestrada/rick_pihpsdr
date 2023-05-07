@@ -308,7 +308,8 @@ void rx_menu(GtkWidget *parent) {
       }
 
       if (filter_board == ALEX && active_receiver->adc == 0
-          && ((protocol==ORIGINAL_PROTOCOL && device != DEVICE_ORION2) || (protocol==NEW_PROTOCOL && device != NEW_DEVICE_ORION2))) {
+          && (protocol==ORIGINAL_PROTOCOL && device != DEVICE_ORION2) ||
+             (protocol==NEW_PROTOCOL && (device != NEW_DEVICE_ORION2 || device != NEW_DEVICE_SATURN))) {
 
         //
         // The "Alex ATT" value is stored in receiver[0] no matter how the ADCs are selected

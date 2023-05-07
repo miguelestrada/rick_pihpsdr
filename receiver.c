@@ -54,6 +54,9 @@
 #ifdef CLIENT_SERVER
 #include "client_server.h"
 #endif
+#ifdef SATURN
+#include "saturnmain.h"
+#endif
 
 
 #define min(x,y) (x<y?x:y)
@@ -1007,7 +1010,14 @@ g_print("%s: id=%d buffer_size=%d fft_size=%d pixels=%d fps=%d\n",__FUNCTION__,i
   switch(id) {
     case 0:
       rx->adc=0;
+#ifdef SATURN
+      rx->ddc=2;
       break;
+    case 1:
+      rx->ddc=3;
+#else
+      break;
+#endif
     default:
       switch(protocol) {
         case ORIGINAL_PROTOCOL:
@@ -1252,6 +1262,7 @@ g_print("%s: rx=%p id=%d local_audio=%d\n",__FUNCTION__,rx,rx->id,rx->local_audi
 
   rx->txrxcount=0;
   rx->txrxmax=0;
+
   return rx;
 }
 
@@ -1315,6 +1326,10 @@ g_print("%s: id=%d rate=%d scale=%d buffer_size=%d output_samples=%d\n",__FUNCTI
   //
   rx->pixels=rx->width*rx->zoom;
   rx->hz_per_pixel=(double)rx->sample_rate/(double)rx->pixels;
+
+#ifdef SATURN
+  if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(rx->ddc, TRUE, rx->sample_rate);
+#endif
 
   g_mutex_unlock(&rx->mutex);
 

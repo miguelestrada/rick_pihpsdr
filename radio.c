@@ -1077,11 +1077,9 @@ void start_radio() {
           sprintf(property_path,"%s.props",radio->name);
           break;
 #endif
-#ifdef SATURN
         case NEW_DEVICE_SATURN:
           sprintf(property_path,"%s.props",radio->name);
           break;
-#endif
         default:
           sprintf(property_path,"%02X-%02X-%02X-%02X-%02X-%02X.props",
                         radio->info.network.mac_address[0],
@@ -1475,17 +1473,11 @@ g_print("radio_change_receivers: from %d to %d\n",receivers,r);
 	set_displaying(receiver[1],0);
 	gtk_container_remove(GTK_CONTAINER(fixed),receiver[1]->panel);
 	receivers=1;
-#ifdef SATURN // disable RX 2
-        if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(3, FALSE, 48000);
-#endif
 	break;
     case 2:
 	gtk_fixed_put(GTK_FIXED(fixed),receiver[1]->panel,0,0);
 	set_displaying(receiver[1],1);
 	receivers=2;
-#ifdef SATURN // enable RX 2
-        if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(3, TRUE, receiver[1]->sample_rate);
-#endif
 	//
 	// Make sure RX1 shares the sample rate  with RX0 when running P1.
 	//

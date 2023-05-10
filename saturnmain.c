@@ -65,7 +65,6 @@ extern sem_t CodecRegMutex;                 // protect writes to codec
 
 bool IsTXMode;                              // true if in TX
 bool SDRActive;                             // true if this SDR is running at the moment
-bool ExitRequested;                         // true if "exit checking" thread requests shutdown
 
 
 #define SDRBOARDID 1                        // Hermes
@@ -81,29 +80,23 @@ bool ExitRequested;                         // true if "exit checking" thread re
 #define VIQSAMPLESPERFRAME 238
 #define VIQBYTESPERFRAME 6*VIQSAMPLESPERFRAME       // total bytes in one outgoing frame
 
+#define VSPKSAMPLESPERFRAME 64                      // samples per UDP frame
+#define VMEMWORDSPERFRAME 32                        // 8 byte writes per UDP msg
+#define VSPKSAMPLESPERMEMWORD 2                     // 2 samples (each 4 bytres) per 8 byte word
+#define VDMASPKBUFFERSIZE 32768						// memory buffer to reserve
+#define VDMASPKTRANSFERSIZE 256                        // write 1 message at a time
+
+#define VMICSAMPLESPERFRAME 64
+#define VDMAMICBUFFERSIZE 32768						// memory buffer to reserve
+#define VDMAMICTRANSFERSIZE 128                        // read 1 message at a time
+#define VMICPACKETSIZE 132
 
 static gpointer saturn_rx_thread(gpointer arg);
 static GThread *saturn_rx_thread_id;
-
-//
-// this runs as its own thread to monitor command line activity. A string "exist" exits the application. 
-// thread initiated at the start.
-//
-void *CheckForExitCommand(void *arg)
-{
-  char ch;
-  printf("spinning up Check For Exit thread\n");
-  
-  while (1)
-  {
-    ch = getchar();
-    if((ch == 'x') || (ch == 'X'))
-    {
-      ExitRequested = true;
-      break;
-    }
-  }
-}
+static gpointer saturn_micaudio_thread(gpointer arg);
+static GThread *saturn_micaudio_thread_id;
+static gpointer saturn_high_priority_thread(gpointer arg);
+static GThread *saturn_high_priority_thread_id;
 
 //
 // code to allocate and free dynamic allocated memory
@@ -170,390 +163,537 @@ void FreeDynamicMemory(void)
     }
 }
 
+#define VDUCIQSAMPLESPERFRAME 240                      // samples per UDP frame
+#define VMEMDUCWORDSPERFRAME 180                       // memory writes per UDP frame
+#define VBYTESPERSAMPLE 6                                                       // 24 bit + 24 bit samples
+#define VDMADUCBUFFERSIZE 32768                                            // memory buffer to reserve
+#define VDMADUCTRANSFERSIZE 1440                       // write 1 message at a time
+
+static int DMADUCWritefile_fd = -1;								// DMA read file device
+static unsigned char* DUCIQReadPtr;								// pointer for reading out an I/Q sample
+static unsigned char* DUCIQHeadPtr;								// ptr to 1st free location in I/Q memory
+static unsigned char* DUCIQBasePtr;								// ptr to DMA location in I/Q memory
+static uint32_t DepthDUC = 0;
+static bool FIFDUCOOverflow;
+static uint32_t Cntr;                                          // sample counter
+static uint8_t* SrcPtr;                                        // pointer to data from Thetis
+static uint8_t* DestPtr;                                       // pointer to DMA buffer data
+
+void saturn_init_duc_iq()
+{
+// variables for DMA buffer
+//
+    uint8_t* IQWriteBuffer = NULL;							// data for DMA to write to DUC
+    uint32_t IQBufferSize = VDMADUCBUFFERSIZE;
+    bool InitError = false;                                 // becomes true if we get an initialisation error
+
+    printf("Initializing DUC I/Q data\n");
+
+    //
+    // setup DMA buffer
+    //
+    posix_memalign((void**)&IQWriteBuffer, VALIGNMENT, IQBufferSize);
+    if (!IQWriteBuffer)
+    {
+        printf("I/Q TX write buffer allocation failed\n");
+        InitError = true;
+    }
+    DUCIQReadPtr = IQWriteBuffer + VBASE;							// offset 4096 bytes into buffer
+    DUCIQHeadPtr = IQWriteBuffer + VBASE;
+    DUCIQBasePtr = IQWriteBuffer + VBASE;
+    memset(IQWriteBuffer, 0, IQBufferSize);
+
+    //
+    // open DMA device driver
+    //
+    DMADUCWritefile_fd = open(VDUCDMADEVICE, O_RDWR);
+    if (DMADUCWritefile_fd < 0)
+    {
+        printf("XDMA write device open failed for TX I/Q data\n");
+        InitError = true;
+    }
+
+//
+// setup hardware
+//
+    EnableDUCMux(false);                                  // disable temporarily
+    SetTXIQDeinterleaved(false);                          // not interleaved (at least for now!)
+    ResetDUCMux();                                        // reset 64 to 48 mux
+    ResetDMAStreamFIFO(eTXDUCDMA);
+    EnableDUCMux(true);                                   // enable operation
+
+}
+
+void saturn_handle_duc_iq(uint8_t *UDPInBuffer)
+{
+    DepthDUC = ReadFIFOMonitorChannel(eTXDUCDMA, &FIFDUCOOverflow);           // read the FIFO free locations
+    while (DepthDUC < VMEMDUCWORDSPERFRAME)       // loop till space available
+    {
+        usleep(500);								                    // 0.5ms wait
+        DepthDUC = ReadFIFOMonitorChannel(eTXDUCDMA, &FIFDUCOOverflow);       // read the FIFO free locations
+    }
+    // copy data from UDP Buffer & DMA write it
+//            memcpy(DUCIQBasePtr, UDPInBuffer + 4, VDMADUCTRANSFERSIZE);                // copy out I/Q samples
+    // need to swap I & Q samples on replay
+    SrcPtr = (UDPInBuffer + 4);
+    DestPtr = DUCIQBasePtr;
+    for (Cntr=0; Cntr < VIQSAMPLESPERFRAME; Cntr++)                     // samplecounter
+    {
+        *DestPtr++ = *(SrcPtr+3);                           // get I sample (3 bytes)
+        *DestPtr++ = *(SrcPtr+4);
+        *DestPtr++ = *(SrcPtr+5);
+        *DestPtr++ = *(SrcPtr+0);                           // get Q sample (3 bytes)
+        *DestPtr++ = *(SrcPtr+1);
+        *DestPtr++ = *(SrcPtr+2);
+        SrcPtr += 6;                                        // point at next source sample
+    }
+    DMAWriteToFPGA(DMADUCWritefile_fd, DUCIQBasePtr, VDMADUCTRANSFERSIZE, VADDRDUCSTREAMWRITE);
+    return;
+}
+
+static int DMASpkWritefile_fd = -1;
+static unsigned char* SpkBasePtr;
+static unsigned char* SpkReadPtr;								// pointer for reading out a spkr sample
+static unsigned char* SpkHeadPtr;								// ptr to 1st free location in spk memory
+static unsigned char* SpkBasePtr;								// ptr to DMA location in spk memory
+static bool FIFOSpkOverflow;
+static uint32_t DepthSpk = 0;
+
+void saturn_init_speaker_audio()
+{
+//
+// variables for DMA buffer
+//
+    uint8_t* SpkWriteBuffer = NULL;							// data for DMA to write to spkr
+    uint32_t SpkBufferSize = VDMASPKBUFFERSIZE;
+    bool InitError = false;                                 // becomes true if we get an initialisation error
+
+    printf("saturn_init_speaker_audio\n");
+
+    //
+    // setup DMA buffer
+    //
+    posix_memalign((void**)&SpkWriteBuffer, VALIGNMENT, SpkBufferSize);
+    if (!SpkWriteBuffer)
+    {
+        printf("spkr write buffer allocation failed\n");
+        InitError = true;
+    }
+    SpkReadPtr = SpkWriteBuffer + VBASE;							// offset 4096 bytes into buffer
+    SpkHeadPtr = SpkWriteBuffer + VBASE;
+    SpkBasePtr = SpkWriteBuffer + VBASE;
+    memset(SpkWriteBuffer, 0, SpkBufferSize);
+
+    //
+    // open DMA device driver
+    //
+    DMASpkWritefile_fd = open(VSPKDMADEVICE, O_RDWR);
+    if (DMASpkWritefile_fd < 0)
+    {
+        printf("XDMA write device open failed for spk data\n");
+        InitError = true;
+    }
+    ResetDMAStreamFIFO(eSpkCodecDMA);
+    return;
+}
+
+void saturn_handle_speaker_audio(uint8_t *UDPInBuffer)
+{
+    uint32_t RegVal;
+
+    RegVal += 1;            //debug
+    DepthSpk = ReadFIFOMonitorChannel(eSpkCodecDMA, &FIFOSpkOverflow);        // read the FIFO free locations
+    //printf("speaker data received; depth = %d\n", DepthSpk);
+    while (DepthSpk < VMEMWORDSPERFRAME)       // loop till space available
+    {
+        usleep(1000);								                    // 1ms wait
+        DepthSpk = ReadFIFOMonitorChannel(eSpkCodecDMA, &FIFOSpkOverflow);    // read the FIFO free locations
+    }
+    // copy data from UDP Buffer & DMA write it
+    memcpy(SpkBasePtr, UDPInBuffer + 4, VDMASPKTRANSFERSIZE);              // copy out spk samples
+//    if(RegVal == 100)
+//        DumpMemoryBuffer(SpkBasePtr, VDMASPKTRANSFERSIZE);
+    DMAWriteToFPGA(DMASpkWritefile_fd, SpkBasePtr, VDMASPKTRANSFERSIZE, VADDRSPKRSTREAMWRITE);
+    return;
+}
+
+
 
 //
 // main program. Initialise, then handle incoming command/general data
 // has a loop that reads & processes incoming command packets
 // see protocol documentation
-// 
+//
 // if invoked "./p2app" - ADCs selected as normal
 // if invoked "./p2app 1900000" - ADC1 and ADC2 inputs set to DDS test source at 1900000Hz
 //
-int saturn_init()
+int saturn_init_ddc_iq()
 {
-  int i, size;
-  uint8_t CmdByte;                                                  // command word from PC app
-  struct ifreq hwaddr;                                              // holds this device MAC address
-  struct sockaddr_in addr_from;                                     // holds MAC address of source of incoming messages
-  uint8_t UDPInBuffer[VDDCPACKETSIZE];                              // outgoing buffer
-  struct iovec iovecinst;                                           // iovcnt buffer - 1 for each outgoing buffer
-  struct msghdr datagram;                                           // multiple incoming message header
+    int i, size;
+    uint8_t CmdByte;                                                  // command word from PC app
+    struct ifreq hwaddr;                                              // holds this device MAC address
+    struct sockaddr_in addr_from;                                     // holds MAC address of source of incoming messages
+    uint8_t UDPInBuffer[VDDCPACKETSIZE];                              // outgoing buffer
+    struct iovec iovecinst;                                           // iovcnt buffer - 1 for each outgoing buffer
+    struct msghdr datagram;                                           // multiple incoming message header
 
-  //
-  // initialise register access semaphores
-  //
-  sem_init(&DDCInSelMutex, 0, 1);                                   // for DDC input select register
-  sem_init(&DDCResetFIFOMutex, 0, 1);                               // for FIFO reset register
-  sem_init(&RFGPIOMutex, 0, 1);                                     // for RF GPIO register
-  sem_init(&CodecRegMutex, 0, 1);                                   // for codec writes
+    //
+    // initialise register access semaphores
+    //
+    sem_init(&DDCInSelMutex, 0, 1);                                   // for DDC input select register
+    sem_init(&DDCResetFIFOMutex, 0, 1);                               // for FIFO reset register
+    sem_init(&RFGPIOMutex, 0, 1);                                     // for RF GPIO register
+    sem_init(&CodecRegMutex, 0, 1);                                   // for codec writes
 
 //
 // setup Saturn hardware
 //
-  OpenXDMADriver();
-  //PrintVersionInfo();
-  CodecInitialise();
-  InitialiseDACAttenROMs();
-  InitialiseCWKeyerRamp();
-  SetCWSidetoneEnabled(true);
-  SetTXProtocol(true);                                              // set to protocol 2
-  SetTXModulationSource(eIQData);                                   // disable debug options
-  //HandlerSetEERMode(false);                                         // no EER
-  SetByteSwapping(false);                                            // h/w to generate NOT network byte order
-  SetSpkrMute(false);
-  SetTXAmplitudeScaling(VCONSTTXAMPLSCALEFACTOR);
-  SetTXEnable(true);
-#if 0
-//
-// start up thread for exit command checking
-//
-  ExitRequested = false;
-  if(pthread_create(&CheckForExitThread, NULL, CheckForExitCommand, NULL) < 0)
-  {
-    perror("pthread_create check for exit");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(CheckForExitThread);
+    OpenXDMADriver();
+    //PrintVersionInfo();
+    CodecInitialise();
+    InitialiseDACAttenROMs();
+    InitialiseCWKeyerRamp();
+    SetCWSidetoneEnabled(true);
+    SetTXProtocol(true);                                              // set to protocol 2
+    SetTXModulationSource(eIQData);                                   // disable debug options
+    //HandlerSetEERMode(false);                                         // no EER
+    SetByteSwapping(false);                                            // h/w to generate NOT network byte order
+    SetSpkrMute(false);
+    SetTXAmplitudeScaling(VCONSTTXAMPLSCALEFACTOR);
+    SetTXEnable(true);
+    return EXIT_SUCCESS;
+}
 
 
-  //
-  // check if we are using test source DDS
-  //
-  if (argc == 2)
-	{
-    TestFrequency = (atoi(argv[1]));
-    SetTestDDSFrequency(TestFrequency, false);   
-    UseTestDDSSource();                           
-  }	
+void saturn_exit()
+{
+    //
+    // clean exit
+    //
+    printf("Exiting\n");
+    sem_destroy(&DDCInSelMutex);
+    sem_destroy(&DDCResetFIFOMutex);
+    sem_destroy(&RFGPIOMutex);
+    sem_destroy(&CodecRegMutex);
+    SetMOX(false);
+    SetTXEnable(false);
+}
 
-  //
-  // create socket for incoming data on the command port
-  //
-  MakeSocket(SocketData, 0);
-
-  //
-  // get this device MAC address
-  //
-  memset(&hwaddr, 0, sizeof(hwaddr));
-  strncpy(hwaddr.ifr_name, "eth0", IFNAMSIZ - 1);
-  ioctl(SocketData[VPORTCOMMAND].Socketid, SIOCGIFHWADDR, &hwaddr);
-  for(i = 0; i < 6; ++i) DiscoveryReply[i + 5] = hwaddr.ifr_addr.sa_data[i];         // copy MAC to reply message
-
-  MakeSocket(SocketData+VPORTDDCSPECIFIC, 0);            // create and bind a socket
-  if(pthread_create(&DDCSpecificThread, NULL, IncomingDDCSpecific, (void*)&SocketData[VPORTDDCSPECIFIC]) < 0)
-  {
-    perror("pthread_create DDC specific");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(DDCSpecificThread);
-
-  MakeSocket(SocketData+VPORTDUCSPECIFIC, 0);            // create and bind a socket
-  if(pthread_create(&DUCSpecificThread, NULL, IncomingDUCSpecific, (void*)&SocketData[VPORTDUCSPECIFIC]) < 0)
-  {
-    perror("pthread_create DUC specific");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(DUCSpecificThread);
-
-  MakeSocket(SocketData+VPORTHIGHPRIORITYTOSDR, 0);            // create and bind a socket
-  if(pthread_create(&HighPriorityToSDRThread, NULL, IncomingHighPriority, (void*)&SocketData[VPORTHIGHPRIORITYTOSDR]) < 0)
-  {
-    perror("pthread_create High priority to SDR");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(HighPriorityToSDRThread);
-
-  MakeSocket(SocketData+VPORTSPKRAUDIO, 0);            // create and bind a socket
-  if(pthread_create(&SpkrAudioThread, NULL, IncomingSpkrAudio, (void*)&SocketData[VPORTSPKRAUDIO]) < 0)
-  {
-    perror("pthread_create speaker audio");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(SpkrAudioThread);
-
-  MakeSocket(SocketData+VPORTDUCIQ, 0);            // create and bind a socket
-  if(pthread_create(&DUCIQThread, NULL, IncomingDUCIQ, (void*)&SocketData[VPORTDUCIQ]) < 0)
-  {
-    perror("pthread_create DUC I/Q");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(DUCIQThread);
-
-//
-// create outgoing mic data thread
-// note this shares a port with incoming DUC specific, so don't create a new port
-//  MakeSocket(SocketData+VPORTMICAUDIO, 0);
-//
-  if(pthread_create(&MicThread, NULL, OutgoingMicSamples, (void*)&SocketData[VPORTDUCSPECIFIC]) < 0)
-  {
-    perror("pthread_create Mic");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(MicThread);
-
-
-//
-// create outgoing high priority data thread
-// note this shares a port with incoming DDC specific, so don't create a new port
-//  MakeSocket(SocketData+VPORTHIGHPRIORITYFROMSDR, 0);
-//
-  if(pthread_create(&HighPriorityFromSDRThread, NULL, OutgoingHighPriority, (void*)&SocketData[VPORTDDCSPECIFIC]) < 0)
-  {
-    perror("pthread_create outgoing hi priority");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(HighPriorityFromSDRThread);
-
-
-//
-// and for now create just one outgoing DDC data thread for DDC 0
-// create all the sockets though!
-//
-  MakeSocket(SocketData + VPORTDDCIQ0, 0);
-  MakeSocket(SocketData + VPORTDDCIQ1, 0);
-  MakeSocket(SocketData + VPORTDDCIQ2, 0);
-  MakeSocket(SocketData + VPORTDDCIQ3, 0);
-  MakeSocket(SocketData + VPORTDDCIQ4, 0);
-  MakeSocket(SocketData + VPORTDDCIQ5, 0);
-  MakeSocket(SocketData + VPORTDDCIQ6, 0);
-  MakeSocket(SocketData + VPORTDDCIQ7, 0);
-  MakeSocket(SocketData + VPORTDDCIQ8, 0);
-  MakeSocket(SocketData + VPORTDDCIQ9, 0);
-  if(pthread_create(&DDCIQThread[0], NULL, OutgoingDDCIQ, (void*)&SocketData[VPORTDDCIQ0]) < 0)
-  {
-    perror("pthread_create DUC I/Q");
-    return EXIT_FAILURE;
-  }
-  pthread_detach(DDCIQThread[0]);
-
-
-  //
-  // now main processing loop. Process received Command packets arriving at port 1024
-  // these are identified by the command byte (byte 4)
-  // cmd=00: general packet
-  // cmd=02: discovery
-  // cmd=03: set IP address (not supported)
-  // cmd=04: erase (not supported)
-  // cmd=05: program (not supported)
-  //
-  while(1)
-  {
-    memset(&iovecinst, 0, sizeof(struct iovec));
-    memset(&datagram, 0, sizeof(datagram));
-    iovecinst.iov_base = &UDPInBuffer;                  // set buffer for incoming message number i
-    iovecinst.iov_len = VDDCPACKETSIZE;
-    datagram.msg_iov = &iovecinst;
-    datagram.msg_iovlen = 1;
-    datagram.msg_name = &addr_from;
-    datagram.msg_namelen = sizeof(addr_from);
-    size = recvmsg(SocketData[0].Socketid, &datagram, 0);         // get one message. If it times out, gets size=-1
-    if(size < 0 && errno != EAGAIN)
+void saturn_discovery()
+{
+    if(devices<MAX_DEVICES)
     {
-      perror("recvfrom");
-      return EXIT_FAILURE;
+
+        struct stat sb;
+        int status = 1;
+        char buf[256];
+        FILE *fp;
+        uint8_t *mac = discovered[devices].info.network.mac_address;
+
+        if (stat("/dev/xdma/card0", &sb) == 0 && S_ISDIR(sb.st_mode))
+        {
+            saturn_init_ddc_iq();
+            saturn_init_speaker_audio();
+            saturn_init_duc_iq();
+            discovered[devices].protocol = NEW_PROTOCOL;
+            discovered[devices].device = NEW_DEVICE_SATURN;
+            discovered[devices].software_version = (RegisterRead(VADDRSWVERSIONREG) >> 4) & 0xFFFF;
+            discovered[devices].fpga_version = RegisterRead(VADDRUSERVERSIONREG);
+            strcpy(discovered[devices].name,"saturn");
+            discovered[devices].frequency_min=0.0;
+            discovered[devices].frequency_max=61440000.0;
+            memset(buf, 0, 256);
+            fp = fopen("/sys/class/net/eth0/address", "rt");
+            if (fp)
+            {
+                if (fgets(buf, sizeof buf, fp) > 0)
+                {
+                    sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0],
+                           &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+                    status = 0;
+                }
+                fclose(fp);
+            }
+            else
+                for(int i=0; i<6; i++)
+                {
+                    discovered[devices].info.network.mac_address[i]=0;
+                }
+            discovered[devices].status = STATE_AVAILABLE;
+            discovered[devices].info.network.address_length=0;
+            discovered[devices].info.network.interface_length=0;
+            strcpy(discovered[devices].info.network.interface_name,"XDMA");
+            discovered[devices].use_tcp=0;
+            discovered[devices].use_routing=0;
+            discovered[devices].supported_receivers=2;
+            fprintf(stderr,"discovery: found SATURN device min=%f max=%f\n",
+                    discovered[devices].frequency_min,
+                    discovered[devices].frequency_max);
+
+            devices++;
+        }
+    }
+}
+
+#define VHIGHPRIOTIYFROMSDRSIZE 60
+
+void start_saturn_high_priority_thread()
+{
+    g_print("new_protocol starting SATURN high_priority thread\n");
+
+    saturn_high_priority_thread_id = g_thread_new( "SATURN HP OUT", saturn_high_priority_thread, NULL);
+    if( ! saturn_high_priority_thread_id )
+    {
+        g_print("g_thread_new failed for saturn_high_priority_thread\n");
+        exit( -1 );
+    }
+}
+
+static gpointer saturn_high_priority_thread(gpointer arg)
+{
+    uint8_t UDPBuffer[VHIGHPRIOTIYFROMSDRSIZE];             // DDC frame buffer
+    uint32_t SequenceCounter = 0;                           // UDP sequence count
+    bool InitError = false;
+    int Error;
+    uint8_t Byte;                                   // data being encoded
+    uint16_t Word;                                  // data being encoded
+
+//
+// OK, now the main work
+// thread commanded to transfer / stop transferring data by global bool SDRActive
+// threat may also be commanded to close down and re-open its socket by command byte
+// VBITCHANGEPORT bit being set (shold only happen when not running)
+//
+    SequenceCounter = 0;
+    printf("starting outgoing high priority data\n");
+    memset(UDPBuffer, 0,sizeof(UDPBuffer));                      // clear the whole packet
+
+    //
+    // this is the main loop. SDR is running. transfer data;
+    // also check for changes to DDC enabled, and DDC interleaved
+    //
+    // potential race conditions: thread execution order is underfined.
+    // when a DDC becomes enabled, its paired DDC may not know yet and may still be set to interleaved.
+    // when a DDC is set to interleaved, the paired DDC may not have been disabled yet.
+    //
+    while(!Error)                               // main loop
+    {
+        // create the packet
+        *(uint32_t *)UDPBuffer = bswap_32(SequenceCounter++);        // add sequence count
+        ReadStatusRegister();
+        Byte = (uint8_t)GetP2PTTKeyInputs();
+        *(uint8_t *)(UDPBuffer+4) = Byte;
+        Byte = (uint8_t)GetADCOverflow();
+        *(uint8_t *)(UDPBuffer+5) = Byte;
+        Word = (uint16_t)GetAnalogueIn(4);
+        *(uint16_t *)(UDPBuffer+6) = bswap_16(Word);                // exciter power
+        Word = (uint16_t)GetAnalogueIn(0);
+        *(uint16_t *)(UDPBuffer+14) = bswap_16(Word);               // forward power
+        Word = (uint16_t)GetAnalogueIn(1);
+        *(uint16_t *)(UDPBuffer+22) = bswap_16(Word);               // reverse power
+        Word = (uint16_t)GetAnalogueIn(5);
+        *(uint16_t *)(UDPBuffer+49) = bswap_16(Word);               // supply voltage
+
+        Word = (uint16_t)GetAnalogueIn(2);
+        *(uint16_t *)(UDPBuffer+53) = bswap_16(Word);               // AIN3
+        Word = (uint16_t)GetAnalogueIn(3);
+        *(uint16_t *)(UDPBuffer+51) = bswap_16(Word);               // AIN4
+
+        Byte = (uint8_t)GetUserIOBits();                  // user I/O bits
+        *(uint8_t *)(UDPBuffer+59) = Byte;
+        //Error = sendmsg(ThreadData -> Socketid, &datagram, 0);
+        saturn_post_high_priority(UDPBuffer);
+
+        if(Error == -1)
+        {
+            printf("High Priority Send Error, errno=%d\n", errno);
+            InitError=true;
+        }
+        if(MOXAsserted)
+            usleep(1000);
+        else
+            usleep(50000);                                    // 50ms gap between messages
+    }
+    printf("ENDING outgoing high priority data\n");
+    return NULL;
+}
+
+void start_saturn_micaudio_thread()
+{
+    g_print("new_protocol starting SATURN micaudio thread\n");
+
+    saturn_micaudio_thread_id = g_thread_new( "SATURN MIC", saturn_micaudio_thread, NULL);
+    if( ! saturn_micaudio_thread_id )
+    {
+        g_print("g_thread_new failed for saturn_micaudio_thread\n");
+        exit( -1 );
+    }
+}
+
+static gpointer saturn_micaudio_thread(gpointer arg)
+{
+    bool InitError = false;
+    int Error;
+
+    g_print( "new_protocol: SATURN micaudio thread\n");
+//
+// variables for DMA buffer
+//
+    uint8_t* MicReadBuffer = NULL;							// data for DMA read from DDC
+    uint32_t MicBufferSize = VDMAMICBUFFERSIZE;
+    uint8_t UDPBuffer[VMICPACKETSIZE];
+    unsigned char* MicReadPtr;								// pointer for reading out a mic sample
+    unsigned char* MicHeadPtr;								// ptr to 1st free location in mic memory
+    unsigned char* MicBasePtr;								// ptr to DMA location in mic memory
+    uint32_t Depth = 0;
+    int DMAReadfile_fd = -1;									// DMA read file device
+    uint32_t RegisterValue;
+    bool FIFOOverflow;
+    uint32_t SequenceCounter;
+
+//
+// setup DMA buffer
+//
+    posix_memalign((void**)&MicReadBuffer, VALIGNMENT, MicBufferSize);
+    if (!MicReadBuffer)
+    {
+        printf("mic read buffer allocation failed\n");
+        InitError = true;
+    }
+    MicReadPtr = MicReadBuffer + VBASE;							// offset 4096 bytes into buffer
+    MicHeadPtr = MicReadBuffer + VBASE;
+    MicBasePtr = MicReadBuffer + VBASE;
+    memset(MicReadBuffer, 0, MicBufferSize);
+
+
+    //
+    // open DMA device driver
+    //
+    DMAReadfile_fd = open(VMICDMADEVICE, O_RDWR);
+    if (DMAReadfile_fd < 0)
+    {
+        printf("XDMA read device open failed for mic data\n");
+        InitError = true;
     }
 
-    if(ExitRequested)
-      break;
+    //
+    // now initialise Saturn hardware.
+    // clear FIFO
+    // then read depth
+    //
+    SetupFIFOMonitorChannel(eMicCodecDMA, false);
+    ResetDMAStreamFIFO(eMicCodecDMA);
+    RegisterValue = ReadFIFOMonitorChannel(eMicCodecDMA, &FIFOOverflow);				// read the FIFO Depth register
+    printf("mic FIFO Depth register = %08x (should be ~0)\n", RegisterValue);
+    Depth = 0;
 
 
-//
-// only process packets of length 60 bytes on this port, to exclude protocol 1 discovery for example.
-// (that means we can't handle the programming packet but we don't use that anyway)
-//
-    CmdByte = UDPInBuffer[4];
-    if(size==VDISCOVERYSIZE)  
-      switch(CmdByte)
-      {
-        //
-        // general packet. Get the port numbers and establish listener threads
-        //
-        case 0:
-          printf("P2 General packet to SDR, size= %d\n", size);
-          //
-          // get "from" MAC address and port; this is where the data goes back to
-          //
-          memset(&reply_addr, 0, sizeof(reply_addr));
-          reply_addr.sin_family = AF_INET;
-          reply_addr.sin_addr.s_addr = addr_from.sin_addr.s_addr;
-          reply_addr.sin_port = addr_from.sin_port;                       // (but each outgoing thread needs to set its own sin_port)
-          HandleGeneralPacket(UDPInBuffer);
-          break;
+    //
+    // planned strategy: just DMA mic data when available; don't copy and DMA a larger amount.
+    // if sufficient FIFO data available: DMA that data and transfer it out.
+    // if it turns out to be too inefficient, we'll have to try larger DMA.
+    //
+    printf("starting activity on mic thread\n");
+    SequenceCounter = 0;
 
-        //
-        // discovery packet
-        //
-        case 2:
-          printf("P2 Discovery packet\n");
-          if(SDRActive)
-            DiscoveryReply[4] = 3;                             // response 2 if not active, 3 if running
-          else
-            DiscoveryReply[4] = 2;                             // response 2 if not active, 3 if running
+    while (!Error)
+    {
+        //while (!InitError && SDRActive)
+        {
 
-          memset(&UDPInBuffer, 0, VDISCOVERYREPLYSIZE);
-          memcpy(&UDPInBuffer, DiscoveryReply, VDISCOVERYREPLYSIZE);
-          sendto(SocketData[0].Socketid, &UDPInBuffer, VDISCOVERYREPLYSIZE, 0, (struct sockaddr *)&addr_from, sizeof(addr_from));
-          break;
+            //
+            // now wait until there is data, then DMA it
+            //
+            Depth = ReadFIFOMonitorChannel(eMicCodecDMA, &FIFOOverflow);			// read the FIFO Depth register. 4 mic words per 64 bit word.
+            while (Depth < (VMICSAMPLESPERFRAME/4))			        // 16 locations = 64 samples
+            {
+                usleep(1000);								        // 1ms wait
+                Depth = ReadFIFOMonitorChannel(eMicCodecDMA, &FIFOOverflow);				// read the FIFO Depth register
+            }
 
-        case 3:
-        case 4:
-        case 5:
-          printf("Unsupported packet\n");
-          break;
+            DMAReadFromFPGA(DMAReadfile_fd, MicBasePtr, VDMAMICTRANSFERSIZE, VADDRMICSTREAMREAD);
 
-        default:
-          break;
-
-      }// end switch (packet type)
-
-//
-// now do any "post packet" processing
-//
-  } //while(1)
-
-#endif
-  return EXIT_SUCCESS;
+            // create the packet into UDPBuffer
+            *(uint32_t*)UDPBuffer = bswap_32(SequenceCounter++);        // add sequence count
+            memcpy(UDPBuffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
+            //printf("RRK, micdata:%x\n", (uint32_t *)(UDPBuffer + 4));
+            saturn_post_micaudio(VMICPACKETSIZE, UDPBuffer);
+            if(Error == -1)
+            {
+                perror("sendmsg, Mic Audio");
+                InitError=true;
+            }
+        }
+    }
+    printf("shutting down outgoing mic data thread\n");
+    return NULL;
 }
-
-
-void saturn_exit() {
-  //
-  // clean exit
-  //
-  printf("Exiting\n");
-  sem_destroy(&DDCInSelMutex);
-  sem_destroy(&DDCResetFIFOMutex);
-  sem_destroy(&RFGPIOMutex);
-  sem_destroy(&CodecRegMutex);
-  SetMOX(false);
-  SetTXEnable(false);
-}
-
-void saturn_discovery() {
-  if(devices<MAX_DEVICES) {
-
-  struct stat sb; 
-  int status = 1;
-  char buf[256];
-  FILE *fp;
-  uint8_t *mac = discovered[devices].info.network.mac_address;
-
-  if (stat("/dev/xdma/card0", &sb) == 0 && S_ISDIR(sb.st_mode))
-  {
-    saturn_init();
-    discovered[devices].protocol = NEW_PROTOCOL;
-    discovered[devices].device = NEW_DEVICE_SATURN;
-    discovered[devices].software_version = (RegisterRead(VADDRSWVERSIONREG) >> 4) & 0xFFFF; 
-    discovered[devices].fpga_version = RegisterRead(VADDRUSERVERSIONREG);
-    strcpy(discovered[devices].name,"saturn");
-    discovered[devices].frequency_min=0.0;
-    discovered[devices].frequency_max=61440000.0;
-    memset(buf, 0, 256);
-    fp = fopen("/sys/class/net/eth0/address", "rt");
-    if (fp) {
-      if (fgets(buf, sizeof buf, fp) > 0) {
-        sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0],
-               &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-        status = 0;
-      }   
-      fclose(fp);
-    } else
-    for(int i=0;i<6;i++) {
-      discovered[devices].info.network.mac_address[i]=0;
-    }   
-    discovered[devices].status = STATE_AVAILABLE;
-    discovered[devices].info.network.address_length=0;
-    discovered[devices].info.network.interface_length=0;
-    strcpy(discovered[devices].info.network.interface_name,"XDMA");
-    discovered[devices].use_tcp=0;
-    discovered[devices].use_routing=0;
-    discovered[devices].supported_receivers=2;
-    fprintf(stderr,"discovery: found SATURN device min=%f max=%f\n",
-                            discovered[devices].frequency_min,
-                            discovered[devices].frequency_max);
-
-    devices++;
-  }
-  }
-}
-
-uint32_t SequenceCounter[VNUMDDC];                          // UDP sequence count
 
 void start_saturn_receive_thread()
 {
-  g_print("new_protocol starting SATURN receive thread\n");
+    g_print("new_protocol starting SATURN receive thread\n");
 
-  saturn_rx_thread_id = g_thread_new( "SATURN RX", saturn_rx_thread, NULL);
-  if( ! saturn_rx_thread_id )
-  {
-    g_print("g_thread_new failed for saturn_rx_thread\n");
-    exit( -1 );
-  }
+    saturn_rx_thread_id = g_thread_new( "SATURN RX", saturn_rx_thread, NULL);
+    if( ! saturn_rx_thread_id )
+    {
+        g_print("g_thread_new failed for saturn_rx_thread\n");
+        exit( -1 );
+    }
 }
 
-static gpointer saturn_rx_thread(gpointer arg) {
-  int bytes;
+static gpointer saturn_rx_thread(gpointer arg)
+{
+    int bytes;
+    uint32_t SequenceCounter[VNUMDDC];                          // UDP sequence count
 
-  g_print( "new_protocol: SATURN receive_thread\n");
-  int running=1;
-  while (running)
-  {
-    //usleep(100000); // 100 ms
-    //process_iq_data(unsigned char *buffer, RECEIVER *rx);
-#if 1
+
+    g_print( "new_protocol: SATURN receive_thread\n");
+    int running=1;
+    //while (running)
+    {
 //
 // memory buffers
 //
-    uint32_t DMATransferSize;
-    bool InitError = false;                                     // becomes true if we get an initialisation error
-    
-    uint32_t ResidueBytes;
-    uint32_t Depth = 0;
-    
-    int IQReadfile_fd = -1;									    // DMA read file device
-    uint32_t RegisterValue;
-    bool FIFOOverflow;
-    int DDC;                                                    // iterator
+        uint32_t DMATransferSize;
+        bool InitError = false;                                     // becomes true if we get an initialisation error
+
+        uint32_t ResidueBytes;
+        uint32_t Depth = 0;
+
+        int IQReadfile_fd = -1;									    // DMA read file device
+        uint32_t RegisterValue;
+        bool FIFOOverflow;
+        int DDC;                                                    // iterator
 
 //
 // variables for analysing a DDC frame
 //
-    uint32_t FrameLength;                                       // number of words per frame
-    uint32_t DDCCounts[VNUMDDC];                                // number of samples per DDC in a frame
-    uint32_t RateWord;                                          // DDC rate word from buffer
-    uint32_t HdrWord;                                           // check word read form DMA's data
-    uint16_t* SrcWordPtr, * DestWordPtr;                        // 16 bit read & write pointers
-    uint32_t *LongWordPtr;
-    uint32_t PrevRateWord;                                      // last used rate word
-    uint32_t Cntr;                                              // sample word counter
-    bool HeaderFound;
-    uint32_t DecodeByteCount;                                   // bytes to decode
+        uint32_t FrameLength;                                       // number of words per frame
+        uint32_t DDCCounts[VNUMDDC];                                // number of samples per DDC in a frame
+        uint32_t RateWord;                                          // DDC rate word from buffer
+        uint32_t HdrWord;                                           // check word read form DMA's data
+        uint16_t* SrcWordPtr, * DestWordPtr;                        // 16 bit read & write pointers
+        uint32_t *LongWordPtr;
+        uint32_t PrevRateWord;                                      // last used rate word
+        uint32_t Cntr;                                              // sample word counter
+        bool HeaderFound;
+        uint32_t DecodeByteCount;                                   // bytes to decode
 
 //
 // initialise. Create memory buffers and open DMA file devices
 //
-    PrevRateWord = 0xFFFFFFFF;                                  // illegal value to forc re-calculation of rates
-    DMATransferSize = VDMATRANSFERSIZE;                         // initial size, but can be changed
-    InitError = CreateDynamicMemory();
-    //
-    // open DMA device driver
-    //
-    IQReadfile_fd = open(VDDCDMADEVICE, O_RDWR);
-    if (IQReadfile_fd < 0)
-    {
-        printf("XDMA read device open failed for DDC data\n");
-        InitError = true;
-    }
+        PrevRateWord = 0xFFFFFFFF;                                  // illegal value to forc re-calculation of rates
+        DMATransferSize = VDMATRANSFERSIZE;                         // initial size, but can be changed
+        InitError = CreateDynamicMemory();
+        //
+        // open DMA device driver
+        //
+        IQReadfile_fd = open(VDDCDMADEVICE, O_RDWR);
+        if (IQReadfile_fd < 0)
+        {
+            printf("XDMA read device open failed for DDC data\n");
+            InitError = true;
+        }
 
 
 //
@@ -563,15 +703,15 @@ static gpointer saturn_rx_thread(gpointer arg) {
 // then read depth
 //
 //    RegisterWrite(0x1010, 0x0000002A);      // disable DDC data transfer; DDC2=test source
-    SetRXDDCEnabled(false);
-    usleep(1000);                           // give FIFO time to stop recording 
-    SetupFIFOMonitorChannel(eRXDDCDMA, false);
-    ResetDMAStreamFIFO(eRXDDCDMA);
-    RegisterValue = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
-	printf("DDC FIFO Depth register = %08x (should be 0)\n", RegisterValue);
-	Depth=0;
+        SetRXDDCEnabled(false);
+        usleep(1000);                           // give FIFO time to stop recording
+        SetupFIFOMonitorChannel(eRXDDCDMA, false);
+        ResetDMAStreamFIFO(eRXDDCDMA);
+        RegisterValue = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
+        printf("DDC FIFO Depth register = %08x (should be 0)\n", RegisterValue);
+        Depth=0;
 
-  SetByteSwapping(true);                                            // h/w to generate NOT network byte order
+        SetByteSwapping(true);                                            // h/w to generate NOT network byte order
 
 //
 // thread loop. runs continuously until commanded by main loop to exit
@@ -579,58 +719,178 @@ static gpointer saturn_rx_thread(gpointer arg) {
 // while there is enough I/Q data, make outgoing packets;
 // when not enough data, read more.
 //
-    while(!InitError)
-    {
-        printf("starting outgoing DDC data\n");
-        //
-        // initialise outgoing DDC packets - 1 per DDC
-        //
-        for (DDC = 0; DDC < VNUMDDC; DDC++)
+        //while(!InitError)
         {
-            SequenceCounter[DDC] = 0;
-	    SetDDCADC(DDC, 0);
-        }
-	SetP2SampleRate(2, TRUE, 48, FALSE);
-	SetP2SampleRate(3, TRUE, 48, FALSE);
-        WriteP2DDCRateRegister();
-      //
-      // enable Saturn DDC to transfer data
-      //
-        printf("outDDCIQ: enable data transfer\n");
-        SetRXDDCEnabled(true);
-        HeaderFound = false;
-        while(!InitError && running)
-        {
-
-        //
-        // loop through all DDC I/Q buffers.
-        // while there is enough I/Q data for this DDC in local (ARM) memory, make DDC Packets
-        // then put any residues at the heads of the buffer, ready for new data to come in
-        //
+            printf("starting outgoing DDC data\n");
+            //
+            // initialise outgoing DDC packets - 1 per DDC
+            //
             for (DDC = 0; DDC < VNUMDDC; DDC++)
             {
-                while ((IQHeadPtr[DDC] - IQReadPtr[DDC]) > VIQBYTESPERFRAME)
+                SequenceCounter[DDC] = 0;
+                SetDDCADC(DDC, 0);
+            }
+            SetP2SampleRate(2, TRUE, 48, FALSE);
+            SetP2SampleRate(3, TRUE, 48, FALSE);
+            WriteP2DDCRateRegister();
+            //
+            // enable Saturn DDC to transfer data
+            //
+            printf("outDDCIQ: enable data transfer\n");
+            SetRXDDCEnabled(true);
+            HeaderFound = false;
+            //while(!InitError && running)
+            while (!InitError && SDRActive)
+            {
+
+                //
+                // loop through all DDC I/Q buffers.
+                // while there is enough I/Q data for this DDC in local (ARM) memory, make DDC Packets
+                // then put any residues at the heads of the buffer, ready for new data to come in
+                //
+                for (DDC = 0; DDC < VNUMDDC; DDC++)
                 {
-//                    printf("enough data for packet: DDC= %d\n", DDC);
-                    *(uint32_t*)UDPBuffer[DDC] = bswap_32(SequenceCounter[DDC]++);     // add sequence count
-                    memset(UDPBuffer[DDC] + 4, 0, 8);                               // clear the timestamp data
-                    *(uint16_t*)(UDPBuffer[DDC] + 12) = bswap_16(24);                  // bits per sample
-                    *(uint16_t*)(UDPBuffer[DDC] + 14) = bswap_16(VIQSAMPLESPERFRAME);  // I/Q samples for ths frame
-                    //
-                    // now add I/Q data & send outgoing packet
-                    //
-                    memcpy(UDPBuffer[DDC] + 16, IQReadPtr[DDC], VIQBYTESPERFRAME);
-                    IQReadPtr[DDC] += VIQBYTESPERFRAME;
-
-                    int Error;
-                    //Error = sendmsg((ThreadData+DDC)->Socketid, &datagram[DDC], 0);
-                    //printf("RRK, DDC:%d data:%x\n", DDC, (uint32_t *)(UDPBuffer[DDC] + 16));
-                    saturn_post_iq_data(DDC, UDPBuffer[DDC]);
-
-                    if (Error == -1)
+                    while ((IQHeadPtr[DDC] - IQReadPtr[DDC]) > VIQBYTESPERFRAME)
                     {
-                        //printf("Send Error, DDC=%d, errno=%d, socket id = %d\n", DDC, errno, (ThreadData+DDC)->Socketid);
-                        InitError = true;
+//                    printf("enough data for packet: DDC= %d\n", DDC);
+                        *(uint32_t*)UDPBuffer[DDC] = bswap_32(SequenceCounter[DDC]++);     // add sequence count
+                        memset(UDPBuffer[DDC] + 4, 0, 8);                               // clear the timestamp data
+                        *(uint16_t*)(UDPBuffer[DDC] + 12) = bswap_16(24);                  // bits per sample
+                        *(uint16_t*)(UDPBuffer[DDC] + 14) = bswap_16(VIQSAMPLESPERFRAME);  // I/Q samples for ths frame
+                        //
+                        // now add I/Q data & send outgoing packet
+                        //
+                        memcpy(UDPBuffer[DDC] + 16, IQReadPtr[DDC], VIQBYTESPERFRAME);
+                        IQReadPtr[DDC] += VIQBYTESPERFRAME;
+
+                        int Error;
+                        //Error = sendmsg((ThreadData+DDC)->Socketid, &datagram[DDC], 0);
+                        //printf("RRK, DDC:%d data:%x\n", DDC, (uint32_t *)(UDPBuffer[DDC] + 16));
+                        saturn_post_iq_data(DDC, UDPBuffer[DDC]);
+
+                        if (Error == -1)
+                        {
+                            //printf("Send Error, DDC=%d, errno=%d, socket id = %d\n", DDC, errno, (ThreadData+DDC)->Socketid);
+                            InitError = true;
+                        }
+                    }
+                    //
+                    // now copy any residue to the start of the buffer (before the data copy in point)
+                    // unless the buffer already starts at or below the base
+                    // if we do a copy, the 1st free location is always base addr
+                    //
+                    ResidueBytes = IQHeadPtr[DDC] - IQReadPtr[DDC];
+                    //		printf("Residue = %d bytes\n",ResidueBytes);
+                    if (IQReadPtr[DDC] > IQBasePtr[DDC])                                // move data down
+                    {
+                        if (ResidueBytes != 0) 		// if there is residue to move
+                        {
+                            memcpy(IQBasePtr[DDC] - ResidueBytes, IQReadPtr[DDC], ResidueBytes);
+                            IQReadPtr[DDC] = IQBasePtr[DDC] - ResidueBytes;
+                        }
+                        else
+                            IQReadPtr[DDC] = IQBasePtr[DDC];
+                        IQHeadPtr[DDC] = IQBasePtr[DDC];                            // ready for new data at base
+                    }
+                }
+                //
+                // P2 packet sending complete.There are no DDC buffers with enough data to send out.
+                // bring in more data by DMA if there is some, else sleep for a while and try again
+                // we have the same issue with DMA: a transfer isn't exactly aligned to the amount we can read out
+                // according to the DDC settings. So we either need to have the part-used DDC transfer variables
+                // persistent across DMAs, or we need to recognise an incomplete fragment of a frame as such
+                // and copy it like we do with IQ data so the next readout begins at a new frame
+                // the latter approach seems easier!
+                //
+                Depth = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
+                //		printf("read: depth = %d\n", Depth);
+                while(Depth < (DMATransferSize/8U))			// 8 bytes per location
+                {
+                    usleep(1000);								// 1ms wait
+                    Depth = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
+                    //			printf("read: depth = %d\n", Depth);
+                }
+//            printf("DDC DMA read %d bytes from destination to base\n", DMATransferSize);
+                DMAReadFromFPGA(IQReadfile_fd, DMAHeadPtr, DMATransferSize, VADDRDDCSTREAMREAD);
+                DMAHeadPtr += DMATransferSize;
+                //
+                // find header: may not be the 1st word
+                //
+//            DumpMemoryBuffer(DMAReadPtr, DMATransferSize);
+                if(HeaderFound == false)                                                    // 1st time: look for header
+                    for(Cntr=16; Cntr < (DMAHeadPtr - DMAReadPtr); Cntr+=8)                  // search for rate word; ignoring 1st
+                    {
+                        if(*(DMAReadPtr + Cntr + 7) == 0x80)
+                        {
+//                        printf("found header at offset=%x\n", Cntr);
+                            HeaderFound = true;
+                            DMAReadPtr += Cntr;                                             // point read buffer where header is
+                            break;
+                        }
+                    }
+                if (HeaderFound == false)                                        // if rate flag not set
+                {
+//                printf("Rate word not found when expected. rate= %08x\n", RateWord);
+                    InitError = true;
+                    exit(1);
+                }
+
+
+                //
+                // finally copy data to DMA buffers according to the embedded DDC rate words
+                // the 1st word is pointed by DMAReadPtr and it should point to a DDC rate word
+                // search for it if not!
+                // (it should always be left in that state).
+                // the top half of the 1st 64 bit word should be 0x8000
+                // and that is located in the 2nd 32 bit location.
+                // assume that DMA is > 1 frame.
+//            printf("headptr = %x readptr = %x\n", DMAHeadPtr, DMAReadPtr);
+                DecodeByteCount = DMAHeadPtr - DMAReadPtr;
+                while (DecodeByteCount >= 16)                       // minimum size to try!
+                {
+                    if(*(DMAReadPtr + 7) != 0x80)
+                    {
+                        printf("header not found for rate word at addr %x\n", DMAReadPtr);
+                        exit(1);
+                    }
+                    else                                                                    // analyse word, then process
+                    {
+                        LongWordPtr = (uint32_t*)DMAReadPtr;                            // get 32 bit ptr
+                        RateWord = *LongWordPtr;                                      // read rate word
+
+                        if (RateWord != PrevRateWord)
+                        {
+                            FrameLength = AnalyseDDCHeader(RateWord, &DDCCounts[0]);           // read new settings
+//                        printf("new framelength = %d\n", FrameLength);
+                            PrevRateWord = RateWord;                                        // so so we know its analysed
+                        }
+                        if (DecodeByteCount >= ((FrameLength+1) * 8))             // if bytes for header & frame
+                        {
+                            //THEN COPY DMA DATA TO I / Q BUFFERS
+                            DMAReadPtr += 8;                                                // point to 1st location past rate word
+                            SrcWordPtr = (uint16_t*)DMAReadPtr;                             // read sample data in 16 bit chunks
+                            for (DDC = 0; DDC < VNUMDDC; DDC++)
+                            {
+                                HdrWord = DDCCounts[DDC];                                   // number of words for this DDC. reuse variable
+                                if (HdrWord != 0)
+                                {
+                                    DestWordPtr = (uint16_t *)IQHeadPtr[DDC];
+                                    for (Cntr = 0; Cntr < HdrWord; Cntr++)                  // count 64 bit words
+                                    {
+                                        *DestWordPtr++ = *SrcWordPtr++;                     // move 48 bits of sample data
+                                        *DestWordPtr++ = *SrcWordPtr++;
+                                        *DestWordPtr++ = *SrcWordPtr++;
+                                        SrcWordPtr++;                                       // and skip 16 bits where theres no data
+                                    }
+                                    IQHeadPtr[DDC] += 6 * HdrWord;                          // 6 bytes per sample
+                                }
+                                // read N samples; write at head ptr
+                            }
+                            DMAReadPtr += FrameLength * 8;                                  // that's how many bytes we read out
+                            DecodeByteCount -= (FrameLength+1) * 8;
+                        }
+                        else
+                            break;                                                          // if not enough left, exit loop
                     }
                 }
                 //
@@ -638,156 +898,291 @@ static gpointer saturn_rx_thread(gpointer arg) {
                 // unless the buffer already starts at or below the base
                 // if we do a copy, the 1st free location is always base addr
                 //
-                ResidueBytes = IQHeadPtr[DDC] - IQReadPtr[DDC];
+                ResidueBytes = DMAHeadPtr - DMAReadPtr;
                 //		printf("Residue = %d bytes\n",ResidueBytes);
-                if (IQReadPtr[DDC] > IQBasePtr[DDC])                                // move data down
+                if (DMAReadPtr > DMABasePtr)                                // move data down
                 {
                     if (ResidueBytes != 0) 		// if there is residue to move
                     {
-                        memcpy(IQBasePtr[DDC] - ResidueBytes, IQReadPtr[DDC], ResidueBytes);
-                        IQReadPtr[DDC] = IQBasePtr[DDC] - ResidueBytes;
+                        memcpy(DMABasePtr - ResidueBytes, DMAReadPtr, ResidueBytes);
+                        DMAReadPtr = DMABasePtr - ResidueBytes;
                     }
                     else
-                        IQReadPtr[DDC] = IQBasePtr[DDC];
-                    IQHeadPtr[DDC] = IQBasePtr[DDC];                            // ready for new data at base
+                        DMAReadPtr = DMABasePtr;
+                    DMAHeadPtr = DMABasePtr;                            // ready for new data at base
                 }
-            }
-            //
-            // P2 packet sending complete.There are no DDC buffers with enough data to send out.
-            // bring in more data by DMA if there is some, else sleep for a while and try again
-            // we have the same issue with DMA: a transfer isn't exactly aligned to the amount we can read out 
-            // according to the DDC settings. So we either need to have the part-used DDC transfer variables
-            // persistent across DMAs, or we need to recognise an incomplete fragment of a frame as such
-            // and copy it like we do with IQ data so the next readout begins at a new frame
-            // the latter approach seems easier!
-            //
-            Depth = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
-            //		printf("read: depth = %d\n", Depth);
-            while(Depth < (DMATransferSize/8U))			// 8 bytes per location
-            {
-                usleep(1000);								// 1ms wait
-                Depth = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
-            //			printf("read: depth = %d\n", Depth);
-            }
-//            printf("DDC DMA read %d bytes from destination to base\n", DMATransferSize);
-            DMAReadFromFPGA(IQReadfile_fd, DMAHeadPtr, DMATransferSize, VADDRDDCSTREAMREAD);
-            DMAHeadPtr += DMATransferSize;
-            //
-            // find header: may not be the 1st word
-            //
-//            DumpMemoryBuffer(DMAReadPtr, DMATransferSize);
-            if(HeaderFound == false)                                                    // 1st time: look for header
-                for(Cntr=16; Cntr < (DMAHeadPtr - DMAReadPtr); Cntr+=8)                  // search for rate word; ignoring 1st
-                {
-                    if(*(DMAReadPtr + Cntr + 7) == 0x80)
-                    {
-//                        printf("found header at offset=%x\n", Cntr);
-                        HeaderFound = true;
-                        DMAReadPtr += Cntr;                                             // point read buffer where header is 
-                        break;
-                    }
-                }
-            if (HeaderFound == false)                                        // if rate flag not set
-            {
-//                printf("Rate word not found when expected. rate= %08x\n", RateWord);
-                InitError = true;
-                exit(1);
-            }
-
-
-            //
-            // finally copy data to DMA buffers according to the embedded DDC rate words
-            // the 1st word is pointed by DMAReadPtr and it should point to a DDC rate word
-            // search for it if not!
-            // (it should always be left in that state).
-            // the top half of the 1st 64 bit word should be 0x8000
-            // and that is located in the 2nd 32 bit location.
-            // assume that DMA is > 1 frame.
-//            printf("headptr = %x readptr = %x\n", DMAHeadPtr, DMAReadPtr);
-            DecodeByteCount = DMAHeadPtr - DMAReadPtr;
-            while (DecodeByteCount >= 16)                       // minimum size to try!
-            {
-                if(*(DMAReadPtr + 7) != 0x80)
-                {
-                    printf("header not found for rate word at addr %x\n", DMAReadPtr);
-                    exit(1);
-                }
-                else                                                                    // analyse word, then process
-                {
-                    LongWordPtr = (uint32_t*)DMAReadPtr;                            // get 32 bit ptr
-                    RateWord = *LongWordPtr;                                      // read rate word
-
-                    if (RateWord != PrevRateWord)
-                    {
-                        FrameLength = AnalyseDDCHeader(RateWord, &DDCCounts[0]);           // read new settings
-//                        printf("new framelength = %d\n", FrameLength);
-                        PrevRateWord = RateWord;                                        // so so we know its analysed
-                    }
-                    if (DecodeByteCount >= ((FrameLength+1) * 8))             // if bytes for header & frame
-                    {
-                        //THEN COPY DMA DATA TO I / Q BUFFERS
-                        DMAReadPtr += 8;                                                // point to 1st location past rate word
-                        SrcWordPtr = (uint16_t*)DMAReadPtr;                             // read sample data in 16 bit chunks
-                        for (DDC = 0; DDC < VNUMDDC; DDC++)
-                        {
-                            HdrWord = DDCCounts[DDC];                                   // number of words for this DDC. reuse variable
-                            if (HdrWord != 0)
-                            {
-                                DestWordPtr = (uint16_t *)IQHeadPtr[DDC];
-                                for (Cntr = 0; Cntr < HdrWord; Cntr++)                  // count 64 bit words
-                                {
-                                    *DestWordPtr++ = *SrcWordPtr++;                     // move 48 bits of sample data
-                                    *DestWordPtr++ = *SrcWordPtr++;
-                                    *DestWordPtr++ = *SrcWordPtr++;
-                                    SrcWordPtr++;                                       // and skip 16 bits where theres no data
-                                }
-                                IQHeadPtr[DDC] += 6 * HdrWord;                          // 6 bytes per sample
-                            }
-                            // read N samples; write at head ptr
-                        }
-                        DMAReadPtr += FrameLength * 8;                                  // that's how many bytes we read out
-                        DecodeByteCount -= (FrameLength+1) * 8;
-                    }
-                    else
-                        break;                                                          // if not enough left, exit loop
-                }
-            }
-            //
-            // now copy any residue to the start of the buffer (before the data copy in point)
-            // unless the buffer already starts at or below the base
-            // if we do a copy, the 1st free location is always base addr
-            //
-            ResidueBytes = DMAHeadPtr - DMAReadPtr;
-            //		printf("Residue = %d bytes\n",ResidueBytes);
-            if (DMAReadPtr > DMABasePtr)                                // move data down
-            {
-                if (ResidueBytes != 0) 		// if there is residue to move
-                {
-                    memcpy(DMABasePtr - ResidueBytes, DMAReadPtr, ResidueBytes);
-                    DMAReadPtr = DMABasePtr - ResidueBytes;
-                }
-                else
-                    DMAReadPtr = DMABasePtr;
-                DMAHeadPtr = DMABasePtr;                            // ready for new data at base
-            }
-        }     // end of while(!InitError) loop
+            }     // end of while(!InitError) loop
+        }
     }
-
-#endif
-  }
-  return NULL;
+    printf("ENDING SATURN receive_thread\n");
+    return NULL;
 }
 
-void saturn_set_frequency(int ddc, unsigned long phase) {
-  //printf("RRKS, ddc:%d phase:%d\n", ddc, phase);
-  SetDDCFrequency(ddc, phase, true);
+void saturn_handle_high_priority(unsigned char *UDPInBuffer)
+{
+    bool RunBit;                                          // true if "run" bit set
+    uint32_t DDCPhaseIncrement;                           // delta phase for a DDC
+    uint8_t Byte, Byte2;                                  // received dat being decoded
+    uint32_t LongWord;
+    uint16_t Word;
+    int i;                                                // counter
+
+    //printf("high priority buffer received\n");
+    Byte = (uint8_t)(UDPInBuffer[4]);
+    RunBit = (bool)(Byte&1);
+
+    SDRActive = (RunBit) ? true : false;
+
+    IsTXMode = (bool)(Byte&2);
+    SetMOX(IsTXMode);
+
+//
+// now properly decode DDC frequencies
+//
+    for (i=0; i<VNUMDDC; i++)
+    {
+        LongWord = ntohl(*(uint32_t *)(UDPInBuffer+i*4+9));
+        SetDDCFrequency(i, LongWord, true);                   // temporarily set above
+    }
+    //
+    // DUC frequency & drive level
+    //
+    LongWord = ntohl(*(uint32_t *)(UDPInBuffer+329));
+    SetDUCFrequency(LongWord, true);
+    Byte = (uint8_t)(UDPInBuffer[345]);
+    SetTXDriveLevel(Byte);
+    //
+    // transverter, speaker mute, open collector, user outputs
+    //
+    Byte = (uint8_t)(UDPInBuffer[1400]);
+    SetXvtrEnable((bool)(Byte&1));
+//      SetSpkrMute((bool)((Byte>>1)&1));
+    Byte = (uint8_t)(UDPInBuffer[1401]);
+    SetOpenCollectorOutputs(Byte);
+    Byte = (uint8_t)(UDPInBuffer[1402]);
+    SetUserOutputBits(Byte);
+    //
+    // Alex
+    //
+    Word = ntohs(*(uint16_t *)(UDPInBuffer+1430));
+    AlexManualRXFilters(Word, 2);
+    Word = ntohs(*(uint16_t *)(UDPInBuffer+1432));
+    AlexManualTXFilters(Word);
+    Word = ntohs(*(uint16_t *)(UDPInBuffer+1434));
+    AlexManualRXFilters(Word, 0);
+    //
+    // RX atten during TX and RX
+    //
+    Byte2 = (uint8_t)(UDPInBuffer[1442]);     // RX2 atten
+    Byte = (uint8_t)(UDPInBuffer[1443]);      // RX1 atten
+    SetADCAttenuator(eADC1, Byte, true, true);
+    SetADCAttenuator(eADC2, Byte2, true, true);
+    //
+    // CWX bits
+    //
+    Byte = (uint8_t)(UDPInBuffer[5]);      // CWX
+    SetCWXBits((bool)(Byte & 1), (bool)((Byte>>2) & 1), (bool)((Byte>>1) & 1));    // enabled, dash, dot
+    return;
 }
 
-void saturn_set_sample_rate(int ddc, int enable, int rate) {
-  //printf("RRKS, ddc:%d enable:%d rate:%d\n", ddc, enable, rate/1000);
-  SetP2SampleRate(ddc, enable, rate/1000, FALSE);
-  WriteP2DDCRateRegister();
+void saturn_handle_general_packet(uint8_t *PacketBuffer)
+{
+    uint16_t Port;                                  // port number from table
+    int i;
+    uint8_t Byte;
+
+//
+// now set the other data carried by this packet
+// wideband capture data:
+//
+    Byte = *(uint8_t*)(PacketBuffer+23);                // get wideband enables
+    SetWidebandEnable(eADC1, (bool)(Byte&1));
+    SetWidebandEnable(eADC2, (bool)(Byte&2));
+    Port = ntohs(*(uint16_t*)(PacketBuffer+24));        // wideband sample count
+    SetWidebandSampleCount(Port);
+    Byte = *(uint8_t*)(PacketBuffer+26);                // wideband sample size
+    SetWidebandSampleSize(Byte);
+    Byte = *(uint8_t*)(PacketBuffer+27);                // wideband update rate
+    SetWidebandUpdateRate(Byte);
+    Byte = *(uint8_t*)(PacketBuffer+28);                // wideband packets per frame
+    SetWidebandPacketsPerFrame(Byte);
+//
+// envelope PWM data:
+//
+    Port = ntohs(*(uint16_t*)(PacketBuffer+33));        // PWM min
+    SetMinPWMWidth(Port);
+    Port = ntohs(*(uint16_t*)(PacketBuffer+35));        // PWM max
+    SetMaxPWMWidth(Port);
+//
+// various bits
+//
+    Byte = *(uint8_t*)(PacketBuffer+37);                // flag bits
+    EnableTimeStamp((bool)(Byte&1));
+    EnableVITA49((bool)(Byte&2));
+    SetFreqPhaseWord((bool)(Byte&8));
+
+    Byte = *(uint8_t*)(PacketBuffer+58);                // flag bits
+    SetPAEnabled((bool)(Byte&1));
+    SetApolloEnabled((bool)(Byte&2));
+
+    Byte = *(uint8_t*)(PacketBuffer+59);                // Alex enable bits
+    SetAlexEnabled(Byte);
+
+    return;
 }
 
+void saturn_handle_ddc_specific(unsigned char *UDPInBuffer)
+{
+    uint8_t Byte1, Byte2;                                 // received data
+    bool Dither, Random;                                  // ADC bits
+    bool Enabled, Interleaved;                            // DDC settings
+    uint16_t Word, Word2;                                 // 16 bit read value
+    int i;                                                // counter
+    EADCSelect ADC = eADC1;                               // ADC to use for a DDC
 
+    //printf("DDC specific buffer received\n");
+    // get ADC details:
+    Byte1 = *(uint8_t*)(UDPInBuffer+4);                   // get ADC count
+    SetADCCount(Byte1);
+    Byte1 = *(uint8_t*)(UDPInBuffer+5);                   // get ADC Dither bits
+    Byte2 = *(uint8_t*)(UDPInBuffer+6);                   // get ADC Random bits
+    Dither  = (bool)(Byte1&1);
+    Random  = (bool)(Byte2&1);
+    SetADCOptions(eADC1, false, Dither, Random);          // ADC1 settings
+    Byte1 = Byte1 >> 1;                                   // move onto ADC bits
+    Byte2 = Byte2 >> 1;
+    Dither  = (bool)(Byte1&1);
+    Random  = (bool)(Byte2&1);
+    SetADCOptions(eADC2, false, Dither, Random);          // ADC2 settings
 
+    //
+    // main settings for each DDC
+    // reuse "dither" for interleaved with next;
+    // reuse "random" for DDC enabled.
+    // be aware an interleaved "odd" DDC will usually be set to disabled, and we need to revert this!
+    //
+    Word = *(uint16_t*)(UDPInBuffer + 7);                 // get DDC enables 15:0 (note it is already low byte 1st!)
+    for(i=0; i<VNUMDDC; i++)
+    {
+        Enabled = (bool)(Word & 1);                        // get enable state
+        Byte1 = *(uint8_t*)(UDPInBuffer+i*6+17);          // get ADC for this DDC
+        Word2 = *(uint16_t*)(UDPInBuffer+i*6+18);         // get sample rate for this DDC
+        Word2 = ntohs(Word2);                             // swap byte order
+        Byte2 = *(uint8_t*)(UDPInBuffer+i*6+22);          // get sample size for this DDC
+        SetDDCSampleSize(i, Byte2);
+        if(Byte1 == 0)
+            ADC = eADC1;
+        else if(Byte1 == 1)
+            ADC = eADC2;
+        else if(Byte1 == 2)
+            ADC = eTXSamples;
+        SetDDCADC(i, ADC);
+
+        Interleaved = false;                                 // assume no synch
+        // finally DDC synchronisation: my implementation it seems isn't what the spec intended!
+        // check: is DDC1 programmed to sync with DDC0;
+        // check: is DDC3 programmed to sync with DDC2;
+        // check: is DDC5 programmed to sync with DDC4;
+        // check: is DDC7 programmed to sync with DDC6;
+        // check: if DDC1 synch to DDC0, enable it;
+        // check: if DDC3 synch to DDC2, enable it;
+        // check: if DDC5 synch to DDC4, enable it;
+        // check: if DDC7 synch to DDC6, enable it;
+        // (reuse the Dither variable)
+        switch(i)
+        {
+        case 0:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1363);          // get DDC0 synch
+            if (Byte1 == 0b00000010)
+                Interleaved = true;                                // set interleave
+            break;
+
+        case 1:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1363);          // get DDC0 synch
+            if (Byte1 == 0b00000010)                          // if synch to DDC1
+                Enabled = true;                                // enable DDC1
+            break;
+
+        case 2:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1365);          // get DDC2 synch
+            if (Byte1 == 0b00001000)
+                Interleaved = true;                                // set interleave
+            break;
+
+        case 3:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1365);          // get DDC2 synch
+            if (Byte1 == 0b00001000)                          // if synch to DDC3
+                Enabled = true;                                // enable DDC3
+            break;
+
+        case 4:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1367);          // get DDC4 synch
+            if (Byte1 == 0b00100000)
+                Interleaved = true;                                // set interleave
+            break;
+
+        case 5:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1367);          // get DDC4 synch
+            if (Byte1 == 0b00100000)                          // if synch to DDC5
+                Enabled = true;                                // enable DDC5
+            break;
+
+        case 6:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1369);          // get DDC6 synch
+            if (Byte1 == 0b10000000)
+                Interleaved = true;                                // set interleave
+            break;
+
+        case 7:
+            Byte1 = *(uint8_t*)(UDPInBuffer + 1369);          // get DDC6 synch
+            if (Byte1 == 0b10000000)                          // if synch to DDC7
+                Enabled = true;                                // enable DDC7
+            break;
+
+        }
+        SetP2SampleRate(i, Enabled, Word2, Interleaved);
+        Word = Word >> 1;                                 // move onto next DDC enabled bit
+    }
+    WriteP2DDCRateRegister();
+    return;
+}
+
+void saturn_handle_duc_specific(unsigned char *UDPInBuffer)
+{
+    uint8_t Byte;
+    uint16_t SidetoneFreq;                                // freq for audio sidetone
+    uint8_t IambicSpeed;                                  // WPM
+    uint8_t IambicWeight;                                 //
+    uint8_t SidetoneVolume;
+    uint8_t CWRFDelay;
+    uint16_t CWHangDelay;
+
+    //printf("DUC buffer received\n");
+// iambic settings
+    IambicSpeed = *(uint8_t*)(UDPInBuffer+9);               // keyer speed
+    IambicWeight = *(uint8_t*)(UDPInBuffer+10);             // keyer weight
+    Byte = *(uint8_t*)(UDPInBuffer+5);                      // keyer bool bits
+    SetCWIambicKeyer(IambicSpeed, IambicWeight, (bool)((Byte >> 2)&1), (bool)((Byte >> 5)&1),
+                     (bool)((Byte >> 6)&1), (bool)((Byte >> 3)&1), (bool)((Byte >> 7)&1));
+// general CW settings
+    SetCWSidetoneEnabled((bool)((Byte >> 4)&1));
+    EnableCW((bool)((Byte >> 1)&1));                        // CW enabled bit
+    SidetoneVolume = *(uint8_t*)(UDPInBuffer+6);            // keyer speed
+    SidetoneFreq = *(uint16_t*)(UDPInBuffer+7);             // get frequency
+    SidetoneFreq = ntohs(SidetoneFreq);                     // convert from big endian
+    SetCWSidetoneVol(SidetoneVolume);
+    SetCWSidetoneFrequency(SidetoneFreq);
+    CWRFDelay = *(uint8_t*)(UDPInBuffer+13);                // delay before CW on
+    CWHangDelay = *(uint16_t*)(UDPInBuffer+11);             // delay before CW off
+    CWHangDelay = ntohs(CWHangDelay);                       // convert from big endian
+    SetCWPTTDelay(CWRFDelay);
+    SetCWHangTime(CWHangDelay);
+// mic and line in options
+    Byte = *(uint8_t*)(UDPInBuffer+50);                     // mic/line options
+    SetMicBoost((bool)((Byte >> 1)&1));
+    SetMicLineInput((bool)(Byte&1));
+    SetOrionMicOptions((bool)((Byte >> 3)&1), (bool)((Byte >> 4)&1), (bool)((~Byte >> 2)&1));
+    Byte = *(uint8_t*)(UDPInBuffer+51);                     // line in gain
+    SetCodecLineInGain(Byte);
+    return;
+}

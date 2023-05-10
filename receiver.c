@@ -1327,9 +1327,6 @@ g_print("%s: id=%d rate=%d scale=%d buffer_size=%d output_samples=%d\n",__FUNCTI
   rx->pixels=rx->width*rx->zoom;
   rx->hz_per_pixel=(double)rx->sample_rate/(double)rx->pixels;
 
-#ifdef SATURN
-  if(radio->device==NEW_DEVICE_SATURN) saturn_set_sample_rate(rx->ddc, TRUE, rx->sample_rate);
-#endif
 
   g_mutex_unlock(&rx->mutex);
 

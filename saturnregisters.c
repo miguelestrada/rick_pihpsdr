@@ -2,7 +2,7 @@
 //
 // Saturn project: Artix7 FPGA + Raspberry Pi4 Compute Module
 // PCI Express interface from linux on Raspberry pi
-// this application uses C code to emulate HPSDR protocol 1 
+// this application uses C code to emulate HPSDR protocol 1
 //
 // copyright Laurence Barker November 2021
 // licenced under GNU GPL3
@@ -49,8 +49,9 @@ uint32_t TXConfigRegValue;                          // value written into TX con
 uint32_t DDCInSelReg;                               // value written into DDC config register
 uint32_t DDCRateReg;                                // value written into DDC rate register
 bool GADCOverride;                                  // true if ADCs are to be overridden & use test source instead
-bool GByteSwapEnabled;                              // true if byte swapping enabled for sample readout 
+bool GByteSwapEnabled;                              // true if byte swapping enabled for sample readout
 bool GPTTEnabled;                                   // true if PTT is enabled
+bool MOXAsserted;                                   // true if MOX as asserted
 bool GPureSignalEnabled;                            // true if PureSignal is enabled
 ESampleRate P1SampleRate;                           // rate for all DDC
 uint32_t P2SampleRates[VNUMDDC];                    // numerical sample rates for each DDC
@@ -64,10 +65,10 @@ bool GPPSEnabled;                                   // NOT CURRENTLY USED - trie
 uint32_t GTXDACCtrl;                                // TX DAC current setting & atten
 uint32_t GRXADCCtrl;                                // RX1 & 2 attenuations
 bool GAlexRXOut;                                    // P1 RX output bit (NOT USED)
-uint32_t GAlexTXRegister;                           // 16 bit used of 32 
-uint32_t GAlexRXRegister;                           // 32 bit RX register 
+uint32_t GAlexTXRegister;                           // 16 bit used of 32
+uint32_t GAlexRXRegister;                           // 32 bit RX register
 bool GRX2GroundDuringTX;                            // true if RX2 grounded while in TX
-uint32_t GAlexCoarseAttenuatorBits;                 // Alex coarse atten NOT USED  
+uint32_t GAlexCoarseAttenuatorBits;                 // Alex coarse atten NOT USED
 bool GAlexManualFilterSelect;                       // true if manual (remote CPU) filter setting
 bool GEnableAlexTXRXRelay;                          // true if TX allowed
 bool GCWKeysReversed;                               // true if keys reversed. Not yet used but will be
@@ -76,7 +77,9 @@ unsigned int GCWKeyerSpeed;                         // Keyer speed in WPM. Not y
 unsigned int GCWKeyerMode;                          // Keyer Mode. True if mode B. Not yet used
 unsigned int GCWKeyerWeight;                        // Keyer Weight. Not yet used
 bool GCWKeyerSpacing;                               // Keyer spacing
+bool GCWIambicKeyerEnabled;                         // true if iambic keyer is enabled
 bool GCWKeyerEnabled;                               // true if iambic keyer is enabled
+uint32_t GIambicConfigReg;                          // copy of iambic comfig register
 uint32_t GCWKeyerSetup;                             // keyer control register
 uint32_t GKeyerSidetoneVol;                         // sidetone volume for CW TX
 bool GCWBreakInEnabled;                             // true if full break-in enabled
@@ -89,7 +92,7 @@ bool GWidebandADC1;                                 // true if wideband on ADC1.
 bool GWidebandADC2;                                 // true if wideband on ADC2. For P2 - not used yet.
 unsigned int GWidebandSampleCount;                  // P2 - not used yet
 unsigned int GWidebandSamplesPerPacket;             // P2 - not used yet
-unsigned int GWidebandUpdateRate;                   // update rate in ms. P2 - not used yet. 
+unsigned int GWidebandUpdateRate;                   // update rate in ms. P2 - not used yet.
 unsigned int GWidebandPacketsPerFrame;              // P2 - not used yet
 unsigned int GAlexEnabledBits;                      // P2. True if Alex1-8 enabled. NOT USED YET.
 bool GPAEnabled;                                    // P2. True if PA enabled. NOT USED YET.
@@ -98,7 +101,9 @@ ESampleRate GDUCSampleRate;                         // P2. TX sample rate. NOT U
 unsigned int GDUCSampleSize;                        // P2. DUC # sample bits. NOT USED YET
 unsigned int GDUCPhaseShift;                        // P2. DUC phase shift. NOT USED YET.
 bool GSpeakerMuted;                                 // P2. True if speaker muted.
-bool GCWXMode;                                      // P2. Not yet used. 
+bool GCWXMode;                                      // P2. Not yet used.
+bool GCWXDot;                                       // True if computer generated CW Dot.
+bool GCWXDash;                                      // True if computer generated CW Dash.
 bool GDashPressed;                                  // P2. True if dash input pressed.
 bool GDotPressed;                                   // P2. true if dot input pressed.
 unsigned int GUserOutputBits;                       // P2. Not yet implermented.
@@ -161,10 +166,10 @@ unsigned int GCodecAnaloguePath;                    // value written in Codec an
 //
 uint32_t DMAFIFODepths[VNUMDMAFIFO] =
 {
-  8192,             //  eRXDDCDMA,		selects RX
-  1024,             //  eTXDUCDMA,		selects TX
-  256,              //  eMicCodecDMA,	selects mic samples
-  256               //  eSpkCodecDMA	selects speaker samples
+    8192,             //  eRXDDCDMA,		selects RX
+    1024,             //  eTXDUCDMA,		selects TX
+    256,              //  eMicCodecDMA,	selects mic samples
+    256               //  eSpkCodecDMA	selects speaker samples
 };
 
 
@@ -173,16 +178,16 @@ uint32_t DMAFIFODepths[VNUMDMAFIFO] =
 //
 uint32_t DDCRegisters[VNUMDDC] =
 {
-  VADDRDDC0REG,
-  VADDRDDC1REG,
-  VADDRDDC2REG,
-  VADDRDDC3REG,
-  VADDRDDC4REG,
-  VADDRDDC5REG,
-  VADDRDDC6REG,
-  VADDRDDC7REG,
-  VADDRDDC8REG,
-  VADDRDDC9REG
+    VADDRDDC0REG,
+    VADDRDDC1REG,
+    VADDRDDC2REG,
+    VADDRDDC3REG,
+    VADDRDDC4REG,
+    VADDRDDC5REG,
+    VADDRDDC6REG,
+    VADDRDDC7REG,
+    VADDRDDC8REG,
+    VADDRDDC9REG
 };
 
 
@@ -240,6 +245,21 @@ uint32_t DDCRegisters[VNUMDDC] =
 #define VCWKEYERHANG 8                                  // hang time is 17:8
 #define VCWKEYERRAMP 18                                 // ramp time
 
+//
+// Iambic config register defines
+//
+#define VIAMBICSPEED 0                                  // speed bits 7:0
+#define VIAMBICWEIGHT 8                                 // weight bits 15:8
+#define VIAMBICREVERSED 16                              // keys reversed bit 16
+#define VIAMBICENABLE 17                                // keyer enabled bit 17
+#define VIAMBICMODE 18                                  // mode bit 18
+#define VIAMBICSTRICT 19                                // strict spacing bit 19
+#define VIAMBICCWX 20                                   // CWX enable bit 20
+#define VIAMBICCWXDOT 21                                // CWX dox bit 21
+#define VIAMBICCWXDASH 22                               // CWX dash bit 22
+#define VCWBREAKIN 23                                   // breakin bit (CW not Iambic strictly!)
+#define VIAMBICCWXBITS 0x00700000                       // all CWX bits
+#define VIAMBICBITS 0x000FFFFF                          // all non CWX bits
 
 //
 // TX config register defines
@@ -265,12 +285,12 @@ sem_t CodecRegMutex;
 //
 void CodecRegisterWrite(uint32_t Address, uint32_t Data)
 {
-        uint32_t WriteData;
+    uint32_t WriteData;
 
-        WriteData = (Address << 9) | (Data & 0x01FFUL);
+    WriteData = (Address << 9) | (Data & 0x01FFUL);
     sem_wait(&CodecRegMutex);                       // get protected access
-        RegisterWrite(VADDRCODECSPIREG, WriteData);     // and write to it
-        //printf("Codec write: send %03x to Codec register address %02x, written=%04x\n", Data, Address, WriteData);
+    RegisterWrite(VADDRCODECSPIREG, WriteData);     // and write to it
+    //printf("Codec write: send %03x to Codec register address %02x, written=%04x\n", Data, Address, WriteData);
     sem_post(&CodecRegMutex);                       // clear protected access
 }
 
@@ -353,6 +373,7 @@ void SetMOX(bool Mox)
 
     sem_wait(&RFGPIOMutex);                         // get protected access
     Register = GPIORegValue;                        // get current settings
+    MOXAsserted = Mox;                              // set variable
     if (Mox)
         Register |= (1 << VMOXBIT);
     else
@@ -407,7 +428,7 @@ void SetATUTune(bool TuneEnabled)
 
 //
 // SetP1SampleRate(ESampleRate Rate, unsigned int Count)
-// sets the sample rate for all DDC used in protocol 1. 
+// sets the sample rate for all DDC used in protocol 1.
 // allowed rates are 48KHz to 384KHz.
 // also sets the number of enabled DDCs, 1-8. Count = #DDC reqd
 // DDCs are enabled by setting a rate; if rate bits=000, DDC is not enabled
@@ -629,7 +650,7 @@ void SetDDCFrequency(uint32_t DDC, uint32_t Value, bool IsDeltaPhase)
     if(DDCDeltaPhase[DDC] != DeltaPhase)    // write back if changed
     {
         DDCDeltaPhase[DDC] = DeltaPhase;        // store this delta phase
-        RegAddress =DDCRegisters[DDC];          // get DDC reg address, 
+        RegAddress =DDCRegisters[DDC];          // get DDC reg address,
         RegisterWrite(RegAddress, DeltaPhase);  // and write to it
     }
 }
@@ -670,7 +691,7 @@ void SetTestDDSFrequency(uint32_t Value, bool IsDeltaPhase)
 // Value: 32 bit phase word or frequency word (1Hz resolution)
 // IsDeltaPhase: true if a delta phase value, false if a frequency value (P1)
 //
-void SetDUCFrequency(unsigned int Value, bool IsDeltaPhase)		// only accepts DUC=0 
+void SetDUCFrequency(unsigned int Value, bool IsDeltaPhase)		// only accepts DUC=0
 {
     uint32_t DeltaPhase;                    // calculated deltaphase value
     double fDeltaPhase;
@@ -728,7 +749,7 @@ void SetDUCFrequency(unsigned int Value, bool IsDeltaPhase)		// only accepts DUC
 //	Bit 11 - PS sample select U10 - QD      Selects main or RX_BYPASS_OUT	Gated C122_Rx_1_in True if C0=0: C3[6:5]=01
 //	Bit 12 - RX1 Filt bypass  U10 - QE      BPF[5]: from C0=0x12: C3[5]
 //	Bit 13 - N/A 		      U10 - QF      0
-//	Bit 14 - RX1 master in	  U10 - QG      (selects main, or transverter/ext1)	Gated. True if C0=0: C3[6:5]=11 or C0=0: C3[6:5]=10 
+//	Bit 14 - RX1 master in	  U10 - QG      (selects main, or transverter/ext1)	Gated. True if C0=0: C3[6:5]=11 or C0=0: C3[6:5]=10
 //	Bit 15 - RED LED 	      U10 - QH      0
 //	Bit 16 - Yellow LED 	  U7 - QA       0
 //	Bit 17 - 10-22 MHz BPF 	  U7 - QB       BPF2[0]: from C0=0x24: C1[0]
@@ -764,19 +785,19 @@ void SetAlexRXAnt(unsigned int Bits)
 
     switch(Bits)
     {
-        case 0:
-        default:
-            break;
-        case 1:
-            Register |= 0x00000800;                       // turn on PS select bit
-            break;
+    case 0:
+    default:
+        break;
+    case 1:
+        Register |= 0x00000800;                       // turn on PS select bit
+        break;
 
-        case 2:
-            Register |= 00004200;                       // turn on master in & EXT1 bits
-            break;
-        case 3:
-            Register |= 00004100;                       // turn on master in & transverter bits
-            break;
+    case 2:
+        Register |= 00004200;                       // turn on master in & EXT1 bits
+        break;
+    case 3:
+        Register |= 00004100;                       // turn on master in & transverter bits
+        break;
     }
     if(Register != GAlexRXRegister)                     // write back if changed
     {
@@ -812,19 +833,19 @@ void SetAlexTXAnt(unsigned int Bits)
 
     switch(Bits)
     {
-        case 0:
-        case 3:
-        default:
-            Register |=0x0100;                          // turn on ANT1
-            break;
+    case 0:
+    case 3:
+    default:
+        Register |=0x0100;                          // turn on ANT1
+        break;
 
-        case 1:
-            Register |=0x0200;                          // turn on ANT2
-            break;
+    case 1:
+        Register |=0x0200;                          // turn on ANT2
+        break;
 
-        case 2:
-            Register |=0x0400;                          // turn on ANT3
-            break;
+    case 2:
+        Register |=0x0400;                          // turn on ANT3
+        break;
     }
     if(Register != GAlexTXRegister)                     // write back if changed
     {
@@ -881,7 +902,7 @@ void SetAlexRXFilters(bool IsRX1, unsigned int Bits)
         if(Register != GAlexRXRegister)                     // write back if changed
         {
             GAlexRXRegister = Register;
-    //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
+            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
         }
     }
 }
@@ -913,7 +934,7 @@ void SetAlexTXFilters(unsigned int Bits)
         if(Register != GAlexTXRegister)                     // write back if changed
         {
             GAlexTXRegister = Register;
-    //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
+            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
         }
     }
 }
@@ -956,7 +977,7 @@ void AlexManualRXFilters(unsigned int Bits, int RX)
         if(Register != GAlexRXRegister)                     // write back if changed
         {
             GAlexRXRegister = Register;
-    //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
+            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
         }
     }
 }
@@ -964,7 +985,7 @@ void AlexManualRXFilters(unsigned int Bits, int RX)
 
 //
 // DisableAlexTRRelay(bool IsDisabled)
-// if parameter true, the TX RX relay is disabled and left in RX 
+// if parameter true, the TX RX relay is disabled and left in RX
 //
 void DisableAlexTRRelay(bool IsDisabled)
 {
@@ -986,7 +1007,7 @@ void AlexManualTXFilters(unsigned int Bits)
         if(Register != GAlexTXRegister)                     // write back if changed
         {
             GAlexTXRegister = Register;
-    //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
+            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
         }
     }
 }
@@ -1145,7 +1166,7 @@ void SetOrionMicOptions(bool MicRing, bool EnableBias, bool EnablePTT)
 
 //
 // SetBalancedMicInput(bool Balanced)
-// selects the balanced microphone input, not supported by current protocol code. 
+// selects the balanced microphone input, not supported by current protocol code.
 // just set the bit into GPIO
 //
 void SetBalancedMicInput(bool Balanced)
@@ -1157,7 +1178,7 @@ void SetBalancedMicInput(bool Balanced)
     Register &= ~(1 << VBALANCEDMICSELECT);         // strip old bit
     if(Balanced)
         Register |= (1 << VBALANCEDMICSELECT);      // set new bit
-    
+
     GPIORegValue = Register;                        // store it back
     RegisterWrite(VADDRRFGPIOREG, Register);      // and write to it
     sem_post(&RFGPIOMutex);                         // clear protected access
@@ -1240,10 +1261,53 @@ void SetADCAttenuator(EADCSelect ADC, unsigned int Atten, bool RXAtten, bool TXA
             Register |= (Atten & 0X1F)<<15;         // add in new bits for ADC2, TX
         }
     }
-        GRXADCCtrl = Register; 
-        RegisterWrite(VADDRADCCTRLREG, Register);      // and write to it
+    GRXADCCtrl = Register;
+    RegisterWrite(VADDRADCCTRLREG, Register);      // and write to it
 }
 
+//
+//void SetCWIambicKeyer(...)
+// setup CW iambic keyer parameters
+// Speed: keyer speed in WPM
+// weight: typically 50
+// ReverseKeys: swaps dot and dash
+// mode: true if mode B
+// strictSpacing: true if it enforces character spacing
+// IambicEnabled: if false, reverts to straight CW key
+//
+void SetCWIambicKeyer(uint8_t Speed, uint8_t Weight, bool ReverseKeys, bool Mode,
+                      bool StrictSpacing, bool IambicEnabled, bool Breakin)
+{
+    uint32_t Register;
+    Register =GIambicConfigReg;                     // copy of H/W register
+    Register &= ~VIAMBICBITS;                       // strip off old iambic bits
+
+    GCWKeyerSpeed = Speed;                          // just save it for now
+    GCWKeyerWeight = Weight;                        // just save it for now
+    GCWKeysReversed = ReverseKeys;                  // just save it for now
+    GCWKeyerMode = Mode;                            // just save it for now
+    GCWKeyerSpacing = StrictSpacing;
+    GCWIambicKeyerEnabled = IambicEnabled;
+// set new data
+    Register |= Speed;
+    Register |= (Weight << VIAMBICWEIGHT);
+    if(ReverseKeys)
+        Register |= (1<<VIAMBICREVERSED);           // set bit if enabled
+    if(Mode)
+        Register |= (1<<VIAMBICMODE);               // set bit if enabled
+    if(StrictSpacing)
+        Register |= (1<<VIAMBICSTRICT);             // set bit if enabled
+    if(IambicEnabled)
+        Register |= (1<<VIAMBICENABLE);             // set bit if enabled
+    if(Breakin)
+        Register |= (1<<VCWBREAKIN);             // set bit if enabled
+
+    if (Register != GIambicConfigReg)               // save if changed
+    {
+        GIambicConfigReg = Register;
+        RegisterWrite(VADDRIAMBICCONFIG, Register);
+    }
+}
 
 
 //
@@ -1324,6 +1388,32 @@ void SetCWKeyerBits(bool Enabled, bool Reversed, bool ModeB, bool Strict, bool B
     GCWKeyerBreakIn = BreakIn;
 }
 
+
+//
+// void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot)
+// setup CWX (host generated dot and dash)
+//
+void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot)
+{
+    uint32_t Register;
+    Register =GIambicConfigReg;                     // copy of H/W register
+    Register &= ~VIAMBICCWXBITS;                    // strip off old CWX bits
+    GCWXMode =CWXEnabled;                           // computer generated CWX mode
+    GCWXDot = CWXDot;                               // computer generated CW Dot.
+    GCWXDash = CWXDash;                             // computer generated CW Dash.
+    if(GCWXMode)
+        Register |= (1<<VIAMBICCWX);                // set bit if enabled
+    if(GCWXDot)
+        Register |= (1<<VIAMBICCWXDOT);             // set bit if enabled
+    if(GCWXDash)
+        Register |= (1<<VIAMBICCWXDASH);            // set bit if enabled
+
+    if (Register != GIambicConfigReg)               // save if changed
+    {
+        GIambicConfigReg = Register;
+        RegisterWrite(VADDRIAMBICCONFIG, Register);
+    }
+}
 
 
 
@@ -1555,7 +1645,7 @@ void SetXvtrEnable(bool Enabled)
     if(Enabled)
         Register |= (1<<VXVTRENABLEBIT);
     else
-    Register &= ~(1<<VXVTRENABLEBIT);
+        Register &= ~(1<<VXVTRENABLEBIT);
     GPIORegValue = Register;                    // store it back
     sem_post(&RFGPIOMutex);                         // clear protected access
 }
@@ -1569,9 +1659,9 @@ void SetXvtrEnable(bool Enabled)
 void SetWidebandEnable(EADCSelect ADC, bool Enabled)
 {
     if(ADC == eADC1)                        // if ADC1 save its state
-        GWidebandADC1 = Enabled; 
+        GWidebandADC1 = Enabled;
     else if(ADC == eADC2)                   // similarly for ADC2
-        GWidebandADC2 = Enabled; 
+        GWidebandADC2 = Enabled;
 
 }
 
@@ -1652,7 +1742,7 @@ void SetAlexEnabled(unsigned int Alex)
 
 //
 // SetPAEnabled(bool Enabled)
-// true if PA is enabled. 
+// true if PA is enabled.
 //
 void SetPAEnabled(bool Enabled)
 {
@@ -1673,7 +1763,7 @@ void SetPAEnabled(bool Enabled)
 
 //
 // SetTXDACCount(unsigned int Count)
-// sets the number of TX DACs, Currently unused. 
+// sets the number of TX DACs, Currently unused.
 //
 void SetTXDACCount(unsigned int Count)
 {
@@ -1683,7 +1773,7 @@ void SetTXDACCount(unsigned int Count)
 
 //
 // SetDUCSampleRate(ESampleRate Rate)
-// sets the DUC sample rate. 
+// sets the DUC sample rate.
 // current Saturn h/w supports 48KHz for protocol 1 and 192KHz for protocol 2
 //
 void SetDUCSampleRate(ESampleRate Rate)
@@ -1705,17 +1795,17 @@ void SetDUCSampleSize(unsigned int Bits)
 
 //
 // SetDUCPhaseShift(unsigned int Value)
-// sets a phase shift onto the TX output. Currently unimplemented. 
+// sets a phase shift onto the TX output. Currently unimplemented.
 //
 void SetDUCPhaseShift(unsigned int Value)
 {
-    GDUCPhaseShift = Value;                                 // just save for now. 
+    GDUCPhaseShift = Value;                                 // just save for now.
 }
 
 
 //
 // SetCWKeys(bool CWXMode, bool Dash, bool Dot)
-// sets the CW key state from SDR application 
+// sets the CW key state from SDR application
 //
 void SetCWKeys(bool CWXMode, bool Dash, bool Dot)
 {
@@ -1877,7 +1967,7 @@ unsigned int GetUserIOBits(void)
 //
 // unsigned int GetAnalogueIn(unsigned int AnalogueSelect)
 // return one of 6 ADC values from the RF board analogue values
-// the paramter selects which input is read. 
+// the paramter selects which input is read.
 // AnalogueSelect=0: AIN1 .... AnalogueSepect=5: AIN6
 unsigned int GetAnalogueIn(unsigned int AnalogueSelect)
 {
@@ -1928,7 +2018,7 @@ void CodecInitialise(void)
 //
 // SetTXAmplitudeScaling (unsigned int Amplitude)
 // sets the overall TX amplitude. This is normally set to a constant determined during development.
-// 
+//
 void SetTXAmplitudeScaling (unsigned int Amplitude)
 {
     uint32_t Register;
@@ -1995,7 +2085,7 @@ void SetTXOutputGate(bool AlwaysOn)
     Register = TXConfigRegValue;                        // get current settings
     if (AlwaysOn)
         Register |= BitMask;                            // set bit if true
-        else
+    else
         Register &= ~BitMask;                           // clear bit if false
     TXConfigRegValue = Register;                    // store it back
     RegisterWrite(VADDRTXCONFIGREG, Register);  // and write to it
@@ -2008,7 +2098,7 @@ void SetTXOutputGate(bool AlwaysOn)
 // even samples to I/Q modulation; odd samples to EER.
 // ensure FIFO empty & reset multiplexer when changing this bit!
 // shgould be called by the TX I/Q data handler only to be sure
-// of meeting that constraint 
+// of meeting that constraint
 //
 void SetTXIQDeinterleaved(bool Interleaved)
 {
@@ -2054,7 +2144,7 @@ void EnableDUCMux(bool Enabled)
 //
 // SetTXModulationTestSourceFrequency (unsigned int Freq)
 // sets the TX modulation DDS source frequency. Only used for development.
-// 
+//
 void SetTXModulationTestSourceFrequency (unsigned int Freq)
 {
     uint32_t Register;
@@ -2116,7 +2206,7 @@ void SetOperateMode(bool IsRunMode)
 //
 void SetFreqPhaseWord(bool IsPhase)
 {
-    
+
 }
 
 

@@ -99,5 +99,7 @@ extern void new_protocol_menu_start(void);
 extern void new_protocol_menu_stop(void);
 #ifdef SATURN
 void saturn_post_iq_data(int ddc, unsigned char *buffer);
+void saturn_post_micaudio(int bytes, unsigned char *buffer);
+void saturn_post_high_priority(unsigned char *buffer);
 #endif
 #endif

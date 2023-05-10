@@ -2,7 +2,7 @@
 //
 // Saturn project: Artix7 FPGA + Raspberry Pi4 Compute Module
 // PCI Express interface from linux on Raspberry pi
-// this application uses C code to emulate HPSDR protocol 1 
+// this application uses C code to emulate HPSDR protocol 1
 //
 // copyright Laurence Barker November 2021
 // licenced under GNU GPL3
@@ -23,6 +23,11 @@
 
 //START OutDDCIQ.h
 #define VDDCPACKETSIZE 1444             // each DDC I/Qpacket
+
+//
+// MOX register
+//
+extern bool MOXAsserted;                                   // true if MOX as asserted
 
 //
 // protocol 2 handler for outgoing DDC I/Q data Packet from SDR
@@ -102,14 +107,14 @@ void RegisterWrite(uint32_t Address, uint32_t Data);
 //
 typedef enum
 {
-	eDisabled,
-	e48KHz,
-	e96KHz,
-	e192KHz,
-	e384KHz,
-	e768KHz,
-	e1536KHz,
-	eInterleaveWithNext
+    eDisabled,
+    e48KHz,
+    e96KHz,
+    e192KHz,
+    e384KHz,
+    e768KHz,
+    e1536KHz,
+    eInterleaveWithNext
 } ESampleRate;
 
 //
@@ -117,10 +122,10 @@ typedef enum
 //
 typedef enum
 {
-  eADC1,                        // selects ADC1
-  eADC2,                        // selects ADC2
-  eTestSource,                  // selects internal test source (not for operational use)
-  eTXSamples                    // (for Puresignal)
+    eADC1,                        // selects ADC1
+    eADC2,                        // selects ADC2
+    eTestSource,                  // selects internal test source (not for operational use)
+    eTXSamples                    // (for Puresignal)
 } EADCSelect;
 
 
@@ -129,10 +134,10 @@ typedef enum
 //
 typedef enum
 {
-eIQData,
-eFixed0Hz,
-eTXDDS,
-eCWKeyer
+    eIQData,
+    eFixed0Hz,
+    eTXDDS,
+    eCWKeyer
 } ETXModulationSource;
 
 
@@ -142,10 +147,10 @@ eCWKeyer
 //
 typedef enum
 {
-	eRXDDCDMA,							// selects RX
-	eTXDUCDMA,							// selects TX
-	eMicCodecDMA,						// selects mic samples
-	eSpkCodecDMA						// selects speaker samples
+    eRXDDCDMA,							// selects RX
+    eTXDUCDMA,							// selects TX
+    eMicCodecDMA,						// selects mic samples
+    eSpkCodecDMA						// selects speaker samples
 } EDMAStreamSelect;
 
 
@@ -197,6 +202,7 @@ typedef enum
 #define VADDRCODECSPIREG 0x14000
 #define VADDRXADCREG 0x18000                    // on-chip XADC (temp, VCC...)
 #define VADDRCWKEYERRAM 0x1C000                 // keyer RAM mapped here
+#define VADDRIAMBICCONFIG 0X7004
 
 #define VADDRUSERVERSIONREG 0x4004              // user defined version register
 #define VADDRSWVERSIONREG 0XC000                // user defined s/w version register
@@ -280,7 +286,7 @@ void SetATUTune(bool TuneEnabled);
 
 //
 // SetP1SampleRate(ESampleRate Rate, unsigned int Count)
-// sets the sample rate for all DDC used in protocol 1. 
+// sets the sample rate for all DDC used in protocol 1.
 // allowed rates are 48KHz to 384KHz.
 // also sets the number of enabled DDCs, 1-8. Count = #DDC reqd
 //
@@ -371,7 +377,7 @@ void SetTestDDSFrequency(uint32_t Value, bool IsDeltaPhase);
 // Value: 32 bit phase word or frequency word (1Hz resolution)
 // IsDeltaPhase: true if a delta phase value, false if a frequency value (P1)
 //
-void SetDUCFrequency(unsigned int Value, bool IsDeltaPhase);		// only accepts DUC=0 
+void SetDUCFrequency(unsigned int Value, bool IsDeltaPhase);		// only accepts DUC=0
 
 
 //
@@ -444,7 +450,7 @@ void SetRX2GroundDuringTX(bool IsGrounded);
 
 //
 // DisableAlexTRRelay(bool IsDisabled)
-// if parameter true, the TX RX relay is disabled and left in RX 
+// if parameter true, the TX RX relay is disabled and left in RX
 //
 void DisableAlexTRRelay(bool IsDisabled);
 
@@ -516,7 +522,7 @@ void SetOrionMicOptions(bool MicRing, bool EnableBias, bool EnablePTT);
 
 //
 // SetBalancedMicInput(bool Balanced)
-// selects the balanced microphone input, not supported by current protocol code. 
+// selects the balanced microphone input, not supported by current protocol code.
 //
 void SetBalancedMicInput(bool Balanced);
 
@@ -545,6 +551,24 @@ void EnablePureSignal(bool Enabled);
 //
 void SetADCAttenuator(EADCSelect ADC, unsigned int Atten, bool RXAtten, bool TXAtten);
 
+//
+//void SetCWIambicKeyer(...)
+// setup CW iambic keyer parameters
+// Speed: keyer speed in WPM
+// weight: typically 50
+// ReverseKeys: swaps dot and dash
+// mode: true if mode B
+// strictSpacing: true if it enforces character spacing
+// IambicEnabled: if false, reverts to straight CW key
+//
+void SetCWIambicKeyer(uint8_t Speed, uint8_t Weight, bool ReverseKeys, bool Mode,
+                      bool StrictSpacing, bool IambicEnabled, bool Breakin);
+
+//
+// void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot)
+// setup CWX (host generated dot and dash)
+//
+void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot);
 
 //
 // SetCWKeyerReversed(bool Reversed)
@@ -754,21 +778,21 @@ void SetAlexEnabled(unsigned int Alex);
 
 //
 // SetPAEnabled(bool Enabled)
-// true if PA is enabled. 
+// true if PA is enabled.
 //
 void SetPAEnabled(bool Enabled);
 
 
 //
 // SetTXDACCount(unsigned int Count)
-// sets the number of TX DACs, Currently unused. 
+// sets the number of TX DACs, Currently unused.
 //
 void SetTXDACCount(unsigned int Count);
 
 
 //
 // SetDUCSampleRate(ESampleRate Rate)
-// sets the DUC sample rate. 
+// sets the DUC sample rate.
 // current Saturn h/w supports 48KHz for protocol 1 and 192KHz for protocol 2
 //
 void SetDUCSampleRate(ESampleRate Rate);
@@ -784,14 +808,14 @@ void SetDUCSampleSize(unsigned int Bits);
 
 //
 // SetDUCPhaseShift(unsigned int Value)
-// sets a phase shift onto the TX output. Currently unimplemented. 
+// sets a phase shift onto the TX output. Currently unimplemented.
 //
 void SetDUCPhaseShift(unsigned int Value);
 
 
 //
 // SetCWKeys(bool CWXMode, bool Dash, bool Dot)
-// sets the CW key state from SDR application 
+// sets the CW key state from SDR application
 //
 void SetCWKeys(bool CWXMode, bool Dash, bool Dot);
 
@@ -877,7 +901,7 @@ unsigned int GetUserIOBits(void);
 //
 // unsigned int GetAnalogueIn(unsigned int AnalogueSelect)
 // return one of 6 ADC values from the RF board analogue values
-// the paramter selects which input is read. 
+// the paramter selects which input is read.
 //
 unsigned int GetAnalogueIn(unsigned int AnalogueSelect);
 

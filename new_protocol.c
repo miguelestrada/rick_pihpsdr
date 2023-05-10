@@ -536,6 +536,7 @@ void new_protocol_init(int pixels) {
     }
 
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       start_saturn_receive_thread();
       start_saturn_micaudio_thread();
       start_saturn_high_priority_thread();
@@ -543,9 +544,10 @@ void new_protocol_init(int pixels) {
       audioindex=4; // leave space for sequence
       audiosequence=0L;
       running=1;
-      // had problems with mybuf stepping on others, TODO
+      // had problems with get_my_buffer, TODO
       mic_line_buffer = malloc(sizeof(mybuffer));
       high_priority_buffer = malloc(sizeof(mybuffer));
+#endif
     } else {
     data_socket=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if(data_socket<0) {
@@ -675,7 +677,9 @@ static void new_protocol_general() {
 //g_print("new_protocol_general: %s:%d\n",inet_ntoa(base_addr.sin_addr),ntohs(base_addr.sin_port));
 
   if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
     saturn_handle_general_packet(general_buffer);
+#endif
   } else {
     if((rc=sendto(data_socket,general_buffer,sizeof(general_buffer),0,(struct sockaddr*)&base_addr,base_addr_length))<0) {
         g_print("sendto socket failed for general\n");
@@ -1194,7 +1198,9 @@ static void new_protocol_high_priority() {
 //
 //g_print("new_protocol_high_priority: %s:%d\n",inet_ntoa(high_priority_addr.sin_addr),ntohs(high_priority_addr.sin_port));
     if (device == NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_handle_high_priority(high_priority_buffer_to_radio);
+#endif
     } else {
     int rc;
     if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
@@ -1289,7 +1295,9 @@ static void new_protocol_transmit_specific() {
 //g_print("new_protocol_transmit_specific: %s:%d\n",inet_ntoa(transmitter_addr.sin_addr),ntohs(transmitter_addr.sin_port));
 
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_handle_duc_specific(transmit_specific_buffer);
+#endif
     } else {
     if((rc=sendto(data_socket,transmit_specific_buffer,sizeof(transmit_specific_buffer),0,(struct sockaddr*)&transmitter_addr,transmitter_addr_length))<0) {
         g_print("sendto socket failed for tx specific: %d\n",rc);
@@ -1397,7 +1405,9 @@ static void new_protocol_receive_specific() {
 //g_print("new_protocol_receive_specific: %s:%d enable=%02X\n",inet_ntoa(receiver_addr.sin_addr),ntohs(receiver_addr.sin_port),receive_specific_buffer[7]);
 
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_handle_ddc_specific(receive_specific_buffer);
+#endif
     } else {
     if((rc=sendto(data_socket,receive_specific_buffer,sizeof(receive_specific_buffer),0,(struct sockaddr*)&receiver_addr,receiver_addr_length))<0) {
       g_print("sendto socket failed for receive_specific: %d\n",rc);
@@ -2073,7 +2083,9 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
       // send the buffer
 
       if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
         saturn_handle_speaker_audio(audiobuffer);
+#endif
       } else {
       rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
       if(rc!=sizeof(audiobuffer)) {
@@ -2114,7 +2126,9 @@ void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right
     // send the buffer
 
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_handle_speaker_audio(audiobuffer);
+#endif
     } else {
     rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
     if(rc!=sizeof(audiobuffer)) {
@@ -2143,7 +2157,9 @@ void new_protocol_flush_iq_samples() {
 
   // send the buffer
   if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
     saturn_handle_duc_iq(iqbuffer);
+#endif
   } else {
   if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
     g_print("sendto socket failed for iq\n");
@@ -2170,7 +2186,9 @@ void new_protocol_iq_samples(int isample,int qsample) {
 
     // send the buffer
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_handle_duc_iq(iqbuffer);
+#endif
     } else {
     if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
       g_print("sendto socket failed for iq\n");

@@ -474,41 +474,6 @@ void new_protocol_init(int pixels) {
     }
 
 #ifdef __APPLE__
-        char sname[12];
-        sprintf(sname,"IQREADY%03d", i);
-        sem_unlink(sname);
-        iq_sem_ready[i]=sem_open(sname, O_CREAT | O_EXCL, 0700, 0);
-        if (iq_sem_ready[i] == SEM_FAILED) {
-          g_print("SEM=%s, ",sname);
-          perror("IQreadySemaphore");
-        }
-        sprintf(sname,"IQBUF%03d", i);
-        sem_unlink(sname);
-        iq_sem_buffer[i]=sem_open(sname, O_CREAT| O_EXCL, 0700, 0);
-        if (iq_sem_buffer[i] == SEM_FAILED) {
-          g_print("SEM=%s, ",sname);
-          perror("IQbufferSemaphore");
-        }
-#else
-        (void)sem_init(&iq_sem_ready[i], 0, 0); // check return value!
-        (void)sem_init(&iq_sem_buffer[i], 0, 0); // check return value!
-#endif
-        iq_thread_id[i] = g_thread_new( "iq thread", iq_thread, GINT_TO_POINTER(i));
-      }
-
-      new_protocol_timer_thread_id = g_thread_new( "new protocol timer", new_protocol_timer_thread, NULL);
-      if( ! new_protocol_timer_thread_id )
-      {
-          g_print("g_thread_new failed on new_protocol_timer_thread\n");
-          exit( -1 );
-      }
-      g_print( "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
-
-      return;
-    }
-#endif
-
-#ifdef __APPLE__
     response_sem=apple_sem(0);
 #else
     (void)sem_init(&response_sem, 0, 0); // check return value!
@@ -1198,7 +1163,7 @@ static void new_protocol_high_priority() {
 
 //g_print("ALEX0 bits:  %02X %02X %02X %02X for rx=%lld tx=%lld\n",high_priority_buffer_to_radio[1432],high_priority_buffer_to_radio[1433],high_priority_buffer_to_radio[1434],high_priority_buffer_to_radio[1435],rxFrequency,txFrequency);
 
-    if (device == NEW_DEVICE_ORION2|| device == NEW_DEVICE_SATURN) {
+    if (device == NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN) {
 
         high_priority_buffer_to_radio[1430]=(alex1>>8)&0xFF;
         high_priority_buffer_to_radio[1431]=alex1&0xFF;
@@ -1231,16 +1196,16 @@ static void new_protocol_high_priority() {
     if (device == NEW_DEVICE_SATURN) {
       saturn_handle_high_priority(high_priority_buffer_to_radio);
     } else {
-      int rc;
-      if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
-          g_print("sendto socket failed for high priority: rc=%d errno=%d\n",rc,errno);
-          abort();
-          //exit(1);
-      }
+    int rc;
+    if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
+        g_print("sendto socket failed for high priority: rc=%d errno=%d\n",rc,errno);
+        abort();
+        //exit(1);
+    }
 
-      if(rc!=sizeof(high_priority_buffer_to_radio)) {
-        g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
-      }
+    if(rc!=sizeof(high_priority_buffer_to_radio)) {
+      g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
+    }
     }
 
     high_priority_sequence++;
@@ -1754,7 +1719,6 @@ void saturn_post_iq_data(int ddc, unsigned char *buffer) {
 #endif
 }
 #endif
-
 static gpointer iq_thread(gpointer data) {
   int ddc=GPOINTER_TO_INT(data);
   long sequence;

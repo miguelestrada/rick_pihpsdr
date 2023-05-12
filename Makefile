@@ -78,19 +78,16 @@ SATURN_OPTIONS=-D SATURN
 SATURN_SOURCES= \
 saturndrivers.c \
 saturnregisters.c \
-saturnmain.c \
-saturnversion.c
+saturnmain.c
 SATURN_HEADERS= \
 saturndrivers.h \
 saturnregisters.h \
 saturntypes.h \
-saturnversion.h \
 saturnmain.h
 SATURN_OBJS= \
 saturndrivers.o \
 saturnregisters.o \
-saturnmain.o \
-saturnversion.o
+saturnmain.o
 endif
 
 ifeq ($(USBOZY_INCLUDE),USBOZY)

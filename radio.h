@@ -63,7 +63,7 @@ extern gboolean radio_is_remote;
 
 extern GtkWidget *fixed;
 
-extern long long calibration;
+extern long long frequency_calibration;
 
 extern char property_path[];
 
@@ -150,7 +150,6 @@ extern int display_average_mode;
 extern double display_average_time;
 
 
-//extern int display_waterfall;
 
 extern int display_zoompan;
 extern int display_sliders;
@@ -166,17 +165,11 @@ extern int mic_bias_enabled;
 extern int mic_ptt_enabled;
 extern int mic_ptt_tip_bias_ring;
 
-//extern double tune_drive;
-//extern double drive;
-
-//extern int tune_drive_level;
-//extern int drive_level;
 
 extern int receivers;
 
 extern ADC adc[2];
 extern DAC dac[2];
-//extern int adc_attenuation[2];
 
 extern int locked;
 
@@ -243,9 +236,6 @@ extern unsigned int AIN4;
 extern unsigned int AIN6;
 extern int supply_volts;
 
-//extern long long displayFrequency;
-//extern long long ddsFrequency;
-//extern long long ddsOffset;
 
 extern long long frequencyB;
 extern int modeB;
@@ -262,8 +252,6 @@ extern int analog_meter;
 extern int smeter;
 extern int alc;
 
-//extern int local_audio;
-//extern int local_microphone;
 
 extern int eer_pwm_min;
 extern int eer_pwm_max;
@@ -295,8 +283,6 @@ extern int diversity_enabled;
 extern double div_cos, div_sin;
 extern double div_gain, div_phase;
 
-extern double meter_calibration;
-extern double display_calibration;
 
 extern int can_transmit;
 
@@ -320,7 +306,6 @@ extern int hl2_audio_codec;
 extern void radio_stop(void);
 extern void reconfigure_radio(void);
 extern void start_radio(void);
-//extern void init_radio(void);
 extern void radio_change_receivers(int r);
 extern void radio_change_sample_rate(int rate);
 extern void set_alex_antennas(void);

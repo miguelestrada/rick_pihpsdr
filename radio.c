@@ -114,7 +114,7 @@ static GtkWidget *waterfall;
 static GtkWidget *audio_waterfall;
 
 // RX and TX calibration
-long long calibration=0LL;
+long long frequency_calibration=0LL;
 
 /*
 #ifdef GPIO
@@ -205,7 +205,6 @@ int display_zoompan=0;
 int display_sliders=0;
 int display_toolbar=0;
 
-//double volume=0.2;
 double mic_gain=0.0;
 int binaural=0;
 
@@ -220,31 +219,21 @@ int mic_bias_enabled=0;
 int mic_ptt_enabled=0;
 int mic_ptt_tip_bias_ring=0;
 
-//double tune_drive=10;
-//double drive=50;
-
-//int drive_level=0;
-//int tune_drive_level=0;
 
 int receivers;
 
 ADC adc[2];
 DAC dac[2];
-//int adc_attenuation[2];
 
 int locked=0;
 
 long long step=100;
 
-//int rit=0;
 int rit_increment=10;
 
 int lt2208Dither = 0;
 int lt2208Random = 0;
 int attenuation = 0; // 0dB
-//unsigned long alex_rx_antenna=0;
-//unsigned long alex_tx_antenna=0;
-//unsigned long alex_attenuation=0;
 
 int cw_keys_reversed=0; // 0=disabled 1=enabled
 int cw_keyer_speed=16; // 1-60 WPM
@@ -300,9 +289,6 @@ int full_tune=0;
 int have_rx_gain=0;
 int rx_gain_calibration=0;
 
-//long long displayFrequency=14250000;
-//long long ddsFrequency=14250000;
-//long long ddsOffset=0;
 
 long long frequencyB=14250000;
 int modeB=modeUSB;
@@ -318,8 +304,6 @@ long long tune_timeout;
 int analog_meter=0;
 int smeter=RXA_S_AV;
 
-//int local_audio=0;
-//int local_microphone=0;
 
 int eer_pwm_min=100;
 int eer_pwm_max=800;
@@ -356,8 +340,6 @@ double div_sin=1.0;	   // Q factor for diversity
 double div_gain=0.0;	   // gain for diversity (in dB)
 double div_phase=0.0;	   // phase for diversity (in degrees, 0 ... 360)
 
-double meter_calibration=0.0;
-double display_calibration=0.0;
 
 int can_transmit=0;
 #ifdef ANDROMEDA
@@ -698,7 +680,8 @@ g_print("create_visual: calling radio_change_receivers: receivers=%d r=%d\n",rec
     radio_change_receivers(r);
   }
 
-  gtk_widget_show_all (top_window);
+  gtk_widget_show_all (top_window);  // ... this shows both the HPSDR and C25 preamp/att sliders
+  att_type_changed();                // ... and this hides the „wrong“ ones.
 
 }
 
@@ -1075,7 +1058,7 @@ void start_radio() {
       switch(device) {
 #ifdef USBOZY
         case DEVICE_OZY:
-          sprintf(property_path,"%s.props",radio->name);
+          sprintf(property_path,"ozy.props");
           break;
 #endif
         case NEW_DEVICE_SATURN:
@@ -1099,33 +1082,6 @@ void start_radio() {
 #endif
   }
 
-  switch(protocol) {
-    case ORIGINAL_PROTOCOL:
-      switch(device) {
-        case DEVICE_ORION2:
-          //meter_calibration=3.0;
-          //display_calibration=3.36;
-          break;
-        default:
-          //meter_calibration=-2.44;
-          //display_calibration=-2.1;
-          break;
-      }
-      break;
-    case NEW_PROTOCOL:
-      switch(device) {
-        case NEW_DEVICE_SATURN:
-        case NEW_DEVICE_ORION2:
-          //meter_calibration=3.0;
-          //display_calibration=3.36;
-          break;
-        default:
-          //meter_calibration=-2.44;
-          //display_calibration=-2.1;
-          break;
-      }
-      break;
-  }
 
   //
   // Determine number of ADCs in the device
@@ -1270,7 +1226,6 @@ void start_radio() {
   radio_sample_rate=radio->info.soapy.sample_rate;
 #endif
 
-//g_print("meter_calibration=%f display_calibration=%f\n", meter_calibration, display_calibration);
 
 #ifdef GPIO
   switch(controller) {
@@ -1978,8 +1933,9 @@ void set_alex_antennas() {
   if (protocol == ORIGINAL_PROTOCOL || protocol == NEW_PROTOCOL) {
     band=band_get_band(vfo[VFO_A].band);
     receiver[0]->alex_antenna=band->alexRxAntenna;
-    receiver[0]->alex_attenuation=band->alexAttenuation;
-    update_att_preamp();
+    if (filter_board != CHARLY25) {
+      receiver[0]->alex_attenuation=band->alexAttenuation;
+    }
     if (can_transmit) {
       band=band_get_band(vfo[get_tx_vfo()].band);
       transmitter->alex_antenna=band->alexTxAntenna;
@@ -2247,7 +2203,7 @@ g_print("radioRestoreState: %s\n",property_path);
     if(value) binaural=atoi(value);
 
     value=getProperty("calibration");
-    if(value) calibration=atoll(value);
+    if(value) frequency_calibration=atoll(value);
 
     value=getProperty("frequencyB");
     if(value) frequencyB=atoll(value);
@@ -2628,7 +2584,7 @@ g_print("radioSaveState: %s\n",property_path);
     sprintf(value,"%d",binaural);
     setProperty("binaural",value);
 
-    sprintf(value,"%lld",calibration);
+    sprintf(value,"%lld",frequency_calibration);
     setProperty("calibration",value);
 
     sprintf(value,"%lld",frequencyB);

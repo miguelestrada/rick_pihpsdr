@@ -700,12 +700,19 @@ static void new_protocol_high_priority() {
     high_priority_buffer_to_radio[4]=running;
 
     if (xmit) {
-      //
-      //  We need not set PTT if doing internal CW with break-in
-      //
       if(txmode==modeCWU || txmode==modeCWL) {
-        if ((!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
+      //
+        // For "internal" CW, we should not set
+        // the MOX bit, everything is done in the FPGA.
+      //
+        // However, if we are doing CAT CW, local CW or tuning/TwoTone,
+        // we must put the SDR into TX mode
+        //
+        if (tune || CAT_cw_is_active || !cw_keyer_internal || transmitter->twotone) {
+           high_priority_buffer_to_radio[4]|=0x02;
+        }
       } else {
+        // not doing CW? always set MOX if transmitting
         high_priority_buffer_to_radio[4]|=0x02;
       }
     }
@@ -737,8 +744,8 @@ static void new_protocol_high_priority() {
       }
     }
 
-    rx1Frequency+=calibration;
-    rx2Frequency+=calibration;
+    rx1Frequency+=frequency_calibration;
+    rx2Frequency+=frequency_calibration;
 
     if (diversity_enabled && !xmit) {
 	//
@@ -798,7 +805,7 @@ static void new_protocol_high_priority() {
       }
     }
 
-    txFrequency+=calibration;
+    txFrequency+=frequency_calibration;
 
     phase=(unsigned long)(((double)txFrequency)*34.952533333333333333333333333333);
 
@@ -1177,16 +1184,15 @@ static void new_protocol_high_priority() {
       saturn_handle_high_priority(high_priority_buffer_to_radio);
 #endif
     } else {
-    int rc;
-    if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
+      int rc;
+      if((rc=sendto(data_socket,high_priority_buffer_to_radio,sizeof(high_priority_buffer_to_radio),0,(struct sockaddr*)&high_priority_addr,high_priority_addr_length))<0) {
         g_print("sendto socket failed for high priority: rc=%d errno=%d\n",rc,errno);
         abort();
-        //exit(1);
-    }
+      }
 
-    if(rc!=sizeof(high_priority_buffer_to_radio)) {
-      g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
-    }
+      if(rc!=sizeof(high_priority_buffer_to_radio)) {
+        g_print("sendto socket for high_priority: %d rather than %ld",rc,(long)sizeof(high_priority_buffer_to_radio));
+      }
     }
 
     high_priority_sequence++;
@@ -1313,8 +1319,12 @@ static void new_protocol_receive_specific() {
         ddc=i;
         if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
             device == NEW_DEVICE_ORION2|| device == NEW_DEVICE_SATURN) ddc=2+i;
-        receive_specific_buffer[5]|=receiver[i]->dither<<ddc; // dither enable
-        receive_specific_buffer[6]|=receiver[i]->random<<ddc; // random enable
+        //
+        // If there is at least one RX which has the dither or random bit set,
+        // this bit is set for the corresponding ADC
+        //
+        receive_specific_buffer[5]|=receiver[i]->dither<<receiver[i]->adc; // dither enable
+        receive_specific_buffer[6]|=receiver[i]->random<<receiver[i]->adc; // random enable
 	if (!xmit && !diversity_enabled) {
 	  // normal RX without diversity
           receive_specific_buffer[7]|=(1<<ddc); // DDC enable
@@ -1580,7 +1590,6 @@ g_print("new_protocol_thread\n");
 #else
               sem_post(&command_response_sem_buffer);
 #endif
-              //process_command_response();
               break;
             case HIGH_PRIORITY_TO_HOST_PORT:
 #ifdef __APPLE__
@@ -1594,7 +1603,6 @@ g_print("new_protocol_thread\n");
 #else
               sem_post(&high_priority_sem_buffer);
 #endif
-              //process_high_priority();
               break;
             case MIC_LINE_TO_HOST_PORT:
 #ifdef __APPLE__
@@ -1867,7 +1875,6 @@ static void process_div_iq_data(unsigned char*buffer) {
 }
 
 static void process_ps_iq_data(unsigned char *buffer) {
-  //long long timestamp; // never used
   int bitspersample;     // used in debug code
   int samplesperframe;
   int b;
@@ -1880,14 +1887,6 @@ static void process_ps_iq_data(unsigned char *buffer) {
   double leftsampledouble1;
   double rightsampledouble1;
 
-  //timestamp=((long long)(buffer[ 4]&0xFF)<<56)
-  //         +((long long)(buffer[ 5]&0xFF)<<48)
-  //         +((long long)(buffer[ 6]&0xFF)<<40)
-  //         +((long long)(buffer[ 7]&0xFF)<<32)
-  //         +((long long)(buffer[ 8]&0xFF)<<24)
-  //         +((long long)(buffer[ 9]&0xFF)<<16)
-  //         +((long long)(buffer[10]&0xFF)<< 8)
-  //         +((long long)(buffer[11]&0xFF)    );
 
   bitspersample=((buffer[12]&0xFF)<<8)+(buffer[13]&0xFF); // used in debug code
   samplesperframe=((buffer[14]&0xFF)<<8)+(buffer[15]&0xFF);
@@ -2146,10 +2145,10 @@ void new_protocol_flush_iq_samples() {
     saturn_handle_duc_iq(iqbuffer);
 #endif
   } else {
-  if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
-    g_print("sendto socket failed for iq\n");
-    exit(1);
-  }
+    if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
+      g_print("sendto socket failed for iq\n");
+      exit(1);
+    }
   }
   iqindex=4;
   tx_iq_sequence++;

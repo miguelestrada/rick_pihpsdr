@@ -47,6 +47,9 @@
 #define RX_IQ_TO_HOST_PORT_7 1042
 
 
+// Network buffers
+#define NET_BUFFER_SIZE 2048
+
 #define MIC_SAMPLES 64
 
 extern int data_socket;
@@ -55,6 +58,24 @@ extern sem_t *response_sem;
 #else
 extern sem_t response_sem;
 #endif
+
+
+////////////////////////////////////////////////////////////////////////////
+//
+// One buffer. The fences can be used to detect over-writing
+// (feature currently not used).
+//
+//
+
+struct mybuffer_ {
+   struct mybuffer_ *next;
+   int             free;
+   long            lowfence;
+   unsigned char   buffer[NET_BUFFER_SIZE];
+   long            highfence;
+};
+
+typedef struct mybuffer_ mybuffer;
 
 /*
 extern long response_sequence;
@@ -98,8 +119,8 @@ extern void new_protocol_cw_audio_samples(short l, short r);
 extern void new_protocol_menu_start(void);
 extern void new_protocol_menu_stop(void);
 #ifdef SATURN
-void saturn_post_iq_data(int ddc, unsigned char *buffer);
-void saturn_post_micaudio(int bytes, unsigned char *buffer);
-void saturn_post_high_priority(unsigned char *buffer);
+void saturn_post_iq_data(int ddc, mybuffer *buffer);
+void saturn_post_micaudio(int bytes, mybuffer *buffer);
+void saturn_post_high_priority(mybuffer *buffer);
 #endif
 #endif

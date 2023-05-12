@@ -176,10 +176,6 @@ static int audioindex;
 static struct sockaddr_in addr;
 static socklen_t length=sizeof(addr);
 
-// Network buffers
-#define NET_BUFFER_SIZE 2048
-
-
 /////////////////////////////////////////////////////////////////////////////
 //
 // MacOS semaphores
@@ -232,23 +228,6 @@ sem_t *apple_sem(int initial_value) {
 // This ONLY applies to the network buffers filled with data in
 // new_protocol_thread(), so this need not be thread-safe.
 //
-////////////////////////////////////////////////////////////////////////////
-
-//
-// One buffer. The fences can be used to detect over-writing
-// (feature currently not used).
-//
-//
-
-struct mybuffer_ {
-   struct mybuffer_ *next;
-   int             free;
-   long            lowfence;
-   unsigned char   buffer[NET_BUFFER_SIZE];
-   long            highfence;
-} mybuffer_;
-
-typedef struct mybuffer_ mybuffer;
 
 //
 // number of buffers allocated (for statistics)
@@ -544,95 +523,91 @@ void new_protocol_init(int pixels) {
       audioindex=4; // leave space for sequence
       audiosequence=0L;
       running=1;
-      // had problems with get_my_buffer, TODO
-      mic_line_buffer = malloc(sizeof(mybuffer));
-      high_priority_buffer = malloc(sizeof(mybuffer));
 #endif
     } else {
-    data_socket=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
-    if(data_socket<0) {
-        g_print("NewProtocol: create socket failed for data_socket\n");
-        exit(-1);
-    }
+      data_socket=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
+      if(data_socket<0) {
+          g_print("NewProtocol: create socket failed for data_socket\n");
+          exit(-1);
+      }
 
-    int optval = 1;
-    setsockopt(data_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    setsockopt(data_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+      int optval = 1;
+      setsockopt(data_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+      setsockopt(data_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 #ifdef __APPLE__
-    //optval = 0x10;  // IPTOS_LOWDELAY
-    optval = 0xb8;  // DSCP EF
-    if(setsockopt(data_socket, IPPROTO_IP, IP_TOS, &optval, sizeof(optval))<0) {
-      perror("data_socket: IP_TOS");
-      exit (-1);
-    }
+      //optval = 0x10;  // IPTOS_LOWDELAY
+      optval = 0xb8;  // DSCP EF
+      if(setsockopt(data_socket, IPPROTO_IP, IP_TOS, &optval, sizeof(optval))<0) {
+        perror("data_socket: IP_TOS");
+        exit (-1);
+      }
 #endif
 
-    // bind to the interface
-    if(bind(data_socket,(struct sockaddr*)&radio->info.network.interface_address,radio->info.network.interface_length)<0) {
-        g_print("metis: bind socket failed for data_socket\n");
-        exit(-1);
-    }
+      // bind to the interface
+      if(bind(data_socket,(struct sockaddr*)&radio->info.network.interface_address,radio->info.network.interface_length)<0) {
+          g_print("metis: bind socket failed for data_socket\n");
+          exit(-1);
+      }
 
 g_print("new_protocol_init: data_socket %d bound to interface %s:%d\n",data_socket,inet_ntoa(radio->info.network.interface_address.sin_addr),ntohs(radio->info.network.interface_address.sin_port));
 
-    memcpy(&base_addr,&radio->info.network.address,radio->info.network.address_length);
-    base_addr_length=radio->info.network.address_length;
-    base_addr.sin_port=htons(GENERAL_REGISTERS_FROM_HOST_PORT);
+      memcpy(&base_addr,&radio->info.network.address,radio->info.network.address_length);
+      base_addr_length=radio->info.network.address_length;
+      base_addr.sin_port=htons(GENERAL_REGISTERS_FROM_HOST_PORT);
 
 //g_print("base_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
-    memcpy(&receiver_addr,&radio->info.network.address,radio->info.network.address_length);
-    receiver_addr_length=radio->info.network.address_length;
-    receiver_addr.sin_port=htons(RECEIVER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
+      memcpy(&receiver_addr,&radio->info.network.address,radio->info.network.address_length);
+      receiver_addr_length=radio->info.network.address_length;
+      receiver_addr.sin_port=htons(RECEIVER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
 //g_print("receive_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
-    memcpy(&transmitter_addr,&radio->info.network.address,radio->info.network.address_length);
-    transmitter_addr_length=radio->info.network.address_length;
-    transmitter_addr.sin_port=htons(TRANSMITTER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
+      memcpy(&transmitter_addr,&radio->info.network.address,radio->info.network.address_length);
+      transmitter_addr_length=radio->info.network.address_length;
+      transmitter_addr.sin_port=htons(TRANSMITTER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
 //g_print("transmit_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
-    memcpy(&high_priority_addr,&radio->info.network.address,radio->info.network.address_length);
-    high_priority_addr_length=radio->info.network.address_length;
-    high_priority_addr.sin_port=htons(HIGH_PRIORITY_FROM_HOST_PORT);
+      memcpy(&high_priority_addr,&radio->info.network.address,radio->info.network.address_length);
+      high_priority_addr_length=radio->info.network.address_length;
+      high_priority_addr.sin_port=htons(HIGH_PRIORITY_FROM_HOST_PORT);
 //g_print("high_priority_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
 //g_print("new_protocol_thread: high_priority_addr setup for port %d\n",HIGH_PRIORITY_FROM_HOST_PORT);
 
-    memcpy(&audio_addr,&radio->info.network.address,radio->info.network.address_length);
-    audio_addr_length=radio->info.network.address_length;
-    audio_addr.sin_port=htons(AUDIO_FROM_HOST_PORT);
+      memcpy(&audio_addr,&radio->info.network.address,radio->info.network.address_length);
+      audio_addr_length=radio->info.network.address_length;
+      audio_addr.sin_port=htons(AUDIO_FROM_HOST_PORT);
 //g_print("audio_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
-    memcpy(&iq_addr,&radio->info.network.address,radio->info.network.address_length);
-    iq_addr_length=radio->info.network.address_length;
-    iq_addr.sin_port=htons(TX_IQ_FROM_HOST_PORT);
+      memcpy(&iq_addr,&radio->info.network.address,radio->info.network.address_length);
+      iq_addr_length=radio->info.network.address_length;
+      iq_addr.sin_port=htons(TX_IQ_FROM_HOST_PORT);
 //g_print("iq_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
 
-    for(i=0;i<MAX_DDC;i++) {
-        memcpy(&data_addr[i],&radio->info.network.address,radio->info.network.address_length);
-        data_addr_length[i]=radio->info.network.address_length;
-        data_addr[i].sin_port=htons(RX_IQ_TO_HOST_PORT_0+i);
-    }
+      for(i=0;i<MAX_DDC;i++) {
+          memcpy(&data_addr[i],&radio->info.network.address,radio->info.network.address_length);
+          data_addr_length[i]=radio->info.network.address_length;
+          data_addr[i].sin_port=htons(RX_IQ_TO_HOST_PORT_0+i);
+      }
 
-    // running is set to 1 at the top of new_protocol_thread,
-    // but this may lead to race conditions. So out of paranoia,
-    // set it to 1 here as well such that we are *absolutely* sure
-    // is is set before starting the timer thread sending the HP packet.
-    running=1;
-    new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
-    if( ! new_protocol_thread_id )
-    {
-        g_print("g_thread_new failed on new_protocol_thread\n");
-        exit( -1 );
-    }
-    g_print( "new_protocol_thread: id=%p\n",new_protocol_thread_id);
+      // running is set to 1 at the top of new_protocol_thread,
+      // but this may lead to race conditions. So out of paranoia,
+      // set it to 1 here as well such that we are *absolutely* sure
+      // is is set before starting the timer thread sending the HP packet.
+      running=1;
+      new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
+      if( ! new_protocol_thread_id )
+      {
+          g_print("g_thread_new failed on new_protocol_thread\n");
+          exit( -1 );
+      }
+      g_print( "new_protocol_thread: id=%p\n",new_protocol_thread_id);
     }
 
     new_protocol_general();
     new_protocol_start();
     new_protocol_high_priority();
-
 }
 
 static void new_protocol_general() {
@@ -1681,13 +1656,13 @@ g_print("mic_line_thread\n");
 }
 
 #ifdef SATURN
-void saturn_post_high_priority(unsigned char *buffer) {
+void saturn_post_high_priority(mybuffer *buffer) {
 #ifdef __APPLE__
               sem_wait(high_priority_sem_ready);
 #else
               sem_wait(&high_priority_sem_ready);
 #endif
-              memcpy(high_priority_buffer->buffer,buffer, 60);
+              high_priority_buffer=buffer;
 #ifdef __APPLE__
               sem_post(high_priority_sem_buffer);
 #else
@@ -1696,13 +1671,13 @@ void saturn_post_high_priority(unsigned char *buffer) {
 }
 
 
-void saturn_post_micaudio(int bytesread, unsigned char *buffer) {
+void saturn_post_micaudio(int bytesread, mybuffer *buffer) {
 #ifdef __APPLE__
               sem_wait(mic_line_sem_ready);
 #else
               sem_wait(&mic_line_sem_ready);
 #endif
-              memcpy(mic_line_buffer->buffer,buffer,132);
+              mic_line_buffer=buffer;
               mic_bytes_read=bytesread;
 #ifdef __APPLE__
               sem_post(mic_line_sem_buffer);
@@ -1711,17 +1686,13 @@ void saturn_post_micaudio(int bytesread, unsigned char *buffer) {
 #endif
 }
 
-void saturn_post_iq_data(int ddc, unsigned char *buffer) {
-      mybuffer *mybuf;
-
+void saturn_post_iq_data(int ddc, mybuffer *buffer) {
 #ifdef __APPLE__
                 sem_wait(iq_sem_ready[ddc]);
 #else
                 sem_wait(&iq_sem_ready[ddc]);
 #endif
-                mybuf=get_my_buffer();
-                iq_buffer[ddc]=mybuf;
-                memcpy(iq_buffer[ddc]->buffer,buffer,1444);
+                iq_buffer[ddc]=buffer;
 #ifdef __APPLE__
                 sem_post(iq_sem_buffer[ddc]);
 #else

@@ -1035,10 +1035,11 @@ void start_radio() {
     case NEW_PROTOCOL:
 #ifdef SATURN
       if(device==NEW_DEVICE_SATURN) {
-        sprintf(text,"piHPSDR: %s (%s %s)",
+        sprintf(text,"piHPSDR: %s (%s %s) on %s",
                    radio->name,
                    p,
-                   version);
+                   version,
+                   iface);
       } else {
 #endif
       sprintf(text,"piHPSDR: %s (%s %s) %s (%s) on %s",

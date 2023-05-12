@@ -1416,7 +1416,11 @@ void new_protocol_stop() {
     running=0;
     new_protocol_high_priority();
     usleep(100000); // 100 ms
-    close (data_socket);
+    if(device==NEW_DEVICE_SATURN) {
+      saturn_exit();
+    } else {
+      close (data_socket);
+    }
 }
 
 //
@@ -1426,11 +1430,18 @@ void new_protocol_menu_stop() {
   fd_set fds;
   struct timeval tv;
   char *buffer;
+
   //
   // halt the protocol, wait 200 msec, and re-start it
   // the data socket is drained but kept open
   //
   running=0;
+  if(device==NEW_DEVICE_SATURN) {
+    g_thread_join(new_protocol_timer_thread_id);
+    new_protocol_high_priority();
+    usleep(200000); // 200 ms
+    return;
+  }
   // wait until the thread that receives from the radio has terminated
   g_thread_join(new_protocol_thread_id);
   g_thread_join(new_protocol_timer_thread_id);
@@ -1477,7 +1488,8 @@ void new_protocol_menu_start() {
   // set it to 1 here as well such that we are *absolutely* sure
   // is is set before starting the timer thread sending the HP packet.
   running=1;
-  new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
+  if(device!=NEW_DEVICE_SATURN)
+    new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
 
   // start the protocol
   new_protocol_general();

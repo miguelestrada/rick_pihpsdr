@@ -28,3 +28,4 @@ void saturn_handle_ddc_specific(unsigned char *receive_specific_buffer);
 void saturn_handle_duc_specific(unsigned char *transmit_specific_buffer);
 void saturn_handle_duc_iq(uint8_t *UDPInBuffer);
 void saturn_handle_high_priority(uint8_t *UDPInBuffer);
+void saturn_exit();

@@ -21,7 +21,7 @@ GPIO_INCLUDE=GPIO
 MIDI_INCLUDE=MIDI
 
 # uncomment the line below to include SATURN support
-# SATURN_INCLUDE=SATURN
+SATURN_INCLUDE=SATURN
 
 # uncomment the line below to include ANDROMEDA support
 # ANDROMEDA_OPTIONS=-D ANDROMEDA

@@ -1417,7 +1417,9 @@ void new_protocol_stop() {
     new_protocol_high_priority();
     usleep(100000); // 100 ms
     if(device==NEW_DEVICE_SATURN) {
+#ifdef SATURN
       saturn_exit();
+#endif
     } else {
       close (data_socket);
     }

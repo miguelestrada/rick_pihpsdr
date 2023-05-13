@@ -5,6 +5,9 @@
 // this application uses C code to emulate HPSDR protocol 1
 //
 // copyright Laurence Barker November 2021
+//
+// Contribution of interfacing to PiHPSDR from N1GP (Rick Koch)
+//
 // licenced under GNU GPL3
 //
 // saturnregisters.h:
@@ -16,10 +19,15 @@
 #ifndef __saturnregisters_h
 #define __saturnregisters_h
 
-#include "saturntypes.h"
 #include <stdint.h>
 
 #define VNUMDDC 10                                  // downconverters available
+
+//START saturntypes.h
+typedef int bool;
+#define true 1
+#define false 0
+//END saturntypes.h
 
 //START OutDDCIQ.h
 #define VDDCPACKETSIZE 1444             // each DDC I/Qpacket
@@ -56,8 +64,6 @@ void CodecRegisterWrite(uint32_t Address, uint32_t Data);
 //END codecwrite.h
 
 //START hwaccess.h
-#include <stdint.h>
-
 
 //
 // open connection to the XDMA device driver for register and DMA access

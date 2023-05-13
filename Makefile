@@ -82,7 +82,6 @@ saturnmain.c
 SATURN_HEADERS= \
 saturndrivers.h \
 saturnregisters.h \
-saturntypes.h \
 saturnmain.h
 SATURN_OBJS= \
 saturndrivers.o \

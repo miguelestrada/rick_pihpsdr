@@ -5,12 +5,14 @@
 // this application uses C code to emulate HPSDR protocol 2
 //
 // copyright Laurence Barker November 2021
+//
+// Contribution of interfacing to PiHPSDR from N1GP (Rick Koch)
+//
 // licenced under GNU GPL3
 //
 // saturnmain.c:
 //
-// Protocol2 is defined by "openHPSDR Ethernet Protocol V3.10"
-// unlike protocol 1, it uses multiple ports for the data endpoints
+// Saturn interface to PiHPSDR
 //
 //////////////////////////////////////////////////////////////
 
@@ -36,7 +38,6 @@
 #include <sys/stat.h>
 #include <byteswap.h>
 
-#include "saturntypes.h"
 #include "saturnregisters.h"              // register I/O for Saturn
 #include "saturndrivers.h"                      // version I/O for Saturn
 
@@ -99,6 +100,7 @@ unsigned char* IQReadPtr[VNUMDDC];                                              
 unsigned char* IQHeadPtr[VNUMDDC];                                                      // ptr to 1st free location in I/Q memory
 unsigned char* IQBasePtr[VNUMDDC];                                                      // ptr to DMA location in I/Q memory
 
+// Memory buffers to be exchanged with PiHPSDR APIs
 #define MAXMYBUF 3
 #define DDCMYBUF 0
 #define MICMYBUF 1
@@ -214,11 +216,10 @@ void saturn_init_duc_iq()
 //
     uint8_t* IQWriteBuffer = NULL;							// data for DMA to write to DUC
     uint32_t IQBufferSize = VDMADUCBUFFERSIZE;
-    bool InitError = false;                                 // becomes true if we get an initialisation error
     unsigned char* DUCIQReadPtr;								// pointer for reading out an I/Q sample
     unsigned char* DUCIQHeadPtr;								// ptr to 1st free location in I/Q memory
 
-    printf("Initializing DUC I/Q data\n");
+    printf("%s: Initializing DUC I/Q data\n", __FUNCTION__);
 
     //
     // setup DMA buffer
@@ -226,8 +227,8 @@ void saturn_init_duc_iq()
     posix_memalign((void**)&IQWriteBuffer, VALIGNMENT, IQBufferSize);
     if (!IQWriteBuffer)
     {
-        printf("I/Q TX write buffer allocation failed\n");
-        InitError = true;
+        printf("%s: I/Q TX write buffer allocation failed\n", __FUNCTION__);
+        exit( -1 );
     }
     DUCIQReadPtr = IQWriteBuffer + VBASE;							// offset 4096 bytes into buffer
     DUCIQHeadPtr = IQWriteBuffer + VBASE;
@@ -240,8 +241,8 @@ void saturn_init_duc_iq()
     DMADUCWritefile_fd = open(VDUCDMADEVICE, O_RDWR);
     if (DMADUCWritefile_fd < 0)
     {
-        printf("XDMA write device open failed for TX I/Q data\n");
-        InitError = true;
+        printf("%s: XDMA write device open failed for TX I/Q data\n", __FUNCTION__);
+        exit( -1 );
     }
 
 //
@@ -300,9 +301,8 @@ void saturn_init_speaker_audio()
 //
     uint8_t* SpkWriteBuffer = NULL;							// data for DMA to write to spkr
     uint32_t SpkBufferSize = VDMASPKBUFFERSIZE;
-    bool InitError = false;                                 // becomes true if we get an initialisation error
 
-    printf("saturn_init_speaker_audio\n");
+    printf("%s\n", __FUNCTION__);
 
     //
     // setup DMA buffer
@@ -310,8 +310,8 @@ void saturn_init_speaker_audio()
     posix_memalign((void**)&SpkWriteBuffer, VALIGNMENT, SpkBufferSize);
     if (!SpkWriteBuffer)
     {
-        printf("spkr write buffer allocation failed\n");
-        InitError = true;
+        printf("%s: spkr write buffer allocation failed\n", __FUNCTION__);
+        exit( -1 );
     }
     SpkReadPtr = SpkWriteBuffer + VBASE;							// offset 4096 bytes into buffer
     SpkHeadPtr = SpkWriteBuffer + VBASE;
@@ -324,8 +324,8 @@ void saturn_init_speaker_audio()
     DMASpkWritefile_fd = open(VSPKDMADEVICE, O_RDWR);
     if (DMASpkWritefile_fd < 0)
     {
-        printf("XDMA write device open failed for spk data\n");
-        InitError = true;
+        printf("%s: XDMA write device open failed for spk data\n", __FUNCTION__);
+        exit( -1 );
     }
     ResetDMAStreamFIFO(eSpkCodecDMA);
     return;
@@ -333,7 +333,7 @@ void saturn_init_speaker_audio()
 
 void saturn_handle_speaker_audio(uint8_t *UDPInBuffer)
 {
-    uint32_t RegVal;
+    uint32_t RegVal = 0;
     bool FIFOSpkOverflow;
     uint32_t DepthSpk = 0;
 
@@ -357,14 +357,6 @@ void saturn_handle_speaker_audio(uint8_t *UDPInBuffer)
 
 int saturn_init_ddc_iq()
 {
-    int i, size;
-    uint8_t CmdByte;                                                  // command word from PC app
-    struct ifreq hwaddr;                                              // holds this device MAC address
-    struct sockaddr_in addr_from;                                     // holds MAC address of source of incoming messages
-    uint8_t UDPInBuffer[VDDCPACKETSIZE];                              // outgoing buffer
-    struct iovec iovecinst;                                           // iovcnt buffer - 1 for each outgoing buffer
-    struct msghdr datagram;                                           // multiple incoming message header
-
     //
     // initialise register access semaphores
     //
@@ -397,7 +389,7 @@ void saturn_exit()
     //
     // clean exit
     //
-    printf("Exiting Saturn\n");
+    printf("%s: Exiting\n", __FUNCTION__);
     Exiting = true;
     sem_destroy(&DDCInSelMutex);
     sem_destroy(&DDCResetFIFOMutex);
@@ -474,35 +466,29 @@ void saturn_discovery()
 
 void start_saturn_high_priority_thread()
 {
-    g_print("new_protocol starting SATURN high_priority thread\n");
+    g_print("%s: \n", __FUNCTION__);
 
     saturn_high_priority_thread_id = g_thread_new( "SATURN HP OUT", saturn_high_priority_thread, NULL);
     if( ! saturn_high_priority_thread_id )
     {
-        g_print("g_thread_new failed for saturn_high_priority_thread\n");
+        g_print("%s: g_thread_new failed\n", __FUNCTION__);
         exit( -1 );
     }
 }
 
 static gpointer saturn_high_priority_thread(gpointer arg)
 {
-    uint32_t SequenceCounter = 0;                           // UDP sequence count
+    uint32_t SequenceCounter;                       // sequence count
     uint8_t Byte;                                   // data being encoded
     uint16_t Word;                                  // data being encoded
 
-//
-// OK, now the main work
-// thread commanded to transfer / stop transferring data by global bool SDRActive
-// threat may also be commanded to close down and re-open its socket by command byte
-// VBITCHANGEPORT bit being set (shold only happen when not running)
-//
     while(!Exiting)
     {
         while(!SDRActive)
             usleep(1000);
 
         SequenceCounter = 0;
-        printf("starting outgoing high priority data\n");
+        printf("STARTING: %s\n", __FUNCTION__);
         //
         // this is the main loop. SDR is running. transfer data;
         // also check for changes to DDC enabled, and DDC interleaved
@@ -545,28 +531,25 @@ static gpointer saturn_high_priority_thread(gpointer arg)
                 usleep(50000);                                    // 50ms gap between messages
         }
     }
-    printf("ENDING outgoing high priority data\n");
+    printf("ENDING: %s\n", __FUNCTION__);
     return NULL;
 }
 
 void start_saturn_micaudio_thread()
 {
-    g_print("new_protocol starting SATURN micaudio thread\n");
+    g_print("%s\n", __FUNCTION__);
 
     saturn_micaudio_thread_id = g_thread_new( "SATURN MIC", saturn_micaudio_thread, NULL);
     if( ! saturn_micaudio_thread_id )
     {
-        g_print("g_thread_new failed for saturn_micaudio_thread\n");
+        g_print("%s: g_thread_new failed\n", __FUNCTION__);
         exit( -1 );
     }
 }
 
 static gpointer saturn_micaudio_thread(gpointer arg)
 {
-    bool InitError = false;
-    int Error;
-
-    g_print( "new_protocol: SATURN micaudio thread\n");
+    g_print( "%s\n", __FUNCTION__);
 //
 // variables for DMA buffer
 //
@@ -587,7 +570,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
     posix_memalign((void**)&MicReadBuffer, VALIGNMENT, MicBufferSize);
     if (!MicReadBuffer)
     {
-        printf("mic read buffer allocation failed\n");
+        printf("%s: mic read buffer allocation failed\n", __FUNCTION__);
         exit( -1 );
     }
     MicReadPtr = MicReadBuffer + VBASE;							// offset 4096 bytes into buffer
@@ -601,8 +584,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
     DMAReadfile_fd = open(VMICDMADEVICE, O_RDWR);
     if (DMAReadfile_fd < 0)
     {
-        printf("XDMA read device open failed for mic data\n");
-        InitError = true;
+        printf("%s: XDMA read device open failed for mic data\n", __FUNCTION__);
         exit( -1 );
     }
 
@@ -614,7 +596,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
     SetupFIFOMonitorChannel(eMicCodecDMA, false);
     ResetDMAStreamFIFO(eMicCodecDMA);
     RegisterValue = ReadFIFOMonitorChannel(eMicCodecDMA, &FIFOOverflow);				// read the FIFO Depth register
-    printf("mic FIFO Depth register = %08x (should be ~0)\n", RegisterValue);
+    printf("%s: mic FIFO Depth register = %08x (should be ~0)\n", __FUNCTION__, RegisterValue);
     Depth = 0;
 
 
@@ -629,7 +611,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
             usleep(1000);
 
         SequenceCounter = 0;
-        printf("starting activity on mic thread\n");
+        printf("STARTING: %s\n", __FUNCTION__);
         while (SDRActive)
         {
             //
@@ -648,33 +630,31 @@ static gpointer saturn_micaudio_thread(gpointer arg)
             mybuffer *mybuf = get_my_buffer(MICMYBUF);
             *(uint32_t*)mybuf->buffer = bswap_32(SequenceCounter++);        // add sequence count
             memcpy(mybuf->buffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
-            //printf("RRK, micdata:%x\n", (uint32_t *)(mybuf->buffer + 4));
             saturn_post_micaudio(VMICPACKETSIZE, mybuf);
         }
     }
-    printf("SHUTTING DOWN outgoing mic data thread\n");
+    printf("ENDING: %s\n", __FUNCTION__);
     return NULL;
 }
 
 void start_saturn_receive_thread()
 {
-    g_print("new_protocol starting SATURN receive thread\n");
+    g_print("%s\n", __FUNCTION__);
 
     saturn_rx_thread_id = g_thread_new( "SATURN RX", saturn_rx_thread, NULL);
     if( ! saturn_rx_thread_id )
     {
-        g_print("g_thread_new failed for saturn_rx_thread\n");
+        g_print("%s: g_thread_new failed\n", __FUNCTION__);
         exit( -1 );
     }
 }
 
 static gpointer saturn_rx_thread(gpointer arg)
 {
-    int bytes;
     uint32_t SequenceCounter[VNUMDDC];                          // UDP sequence count
 
 
-    g_print( "new_protocol: SATURN receive_thread\n");
+    g_print( "%s\n", __FUNCTION__);
 
 //
 // memory buffers
@@ -682,7 +662,7 @@ static gpointer saturn_rx_thread(gpointer arg)
     uint32_t DMATransferSize;
 
     uint32_t ResidueBytes;
-    uint32_t Depth = 0;
+    uint32_t Depth;
 
     int IQReadfile_fd = -1;									    // DMA read file device
     uint32_t RegisterValue;
@@ -710,7 +690,7 @@ static gpointer saturn_rx_thread(gpointer arg)
     DMATransferSize = VDMATRANSFERSIZE;                         // initial size, but can be changed
     if (CreateDynamicMemory())
     {
-        printf("CreateDynamicMemory Failed\n");
+        printf("%s: CreateDynamicMemory Failed\n", __FUNCTION__);
         exit( -1 );
     }
 
@@ -720,7 +700,7 @@ static gpointer saturn_rx_thread(gpointer arg)
     IQReadfile_fd = open(VDDCDMADEVICE, O_RDWR);
     if (IQReadfile_fd < 0)
     {
-        printf("XDMA read device open failed for DDC data\n");
+        printf("%s: XDMA read device open failed for DDC data\n", __FUNCTION__);
         exit( -1 );
     }
 
@@ -737,7 +717,7 @@ static gpointer saturn_rx_thread(gpointer arg)
     SetupFIFOMonitorChannel(eRXDDCDMA, false);
     ResetDMAStreamFIFO(eRXDDCDMA);
     RegisterValue = ReadFIFOMonitorChannel(eRXDDCDMA, &FIFOOverflow);				// read the FIFO Depth register
-    printf("DDC FIFO Depth register = %08x (should be 0)\n", RegisterValue);
+    printf("%s: DDC FIFO Depth register = %08x (should be 0)\n", __FUNCTION__, RegisterValue);
     Depth=0;
 
     SetByteSwapping(true);                                            // h/w to generate network byte order
@@ -758,7 +738,7 @@ static gpointer saturn_rx_thread(gpointer arg)
     //
     // enable Saturn DDC to transfer data
     //
-    printf("outDDCIQ: enable data transfer\n");
+    printf("%s: enable data transfer\n", __FUNCTION__);
     SetRXDDCEnabled(true);
     HeaderFound = false;
     while (!Exiting)
@@ -769,7 +749,7 @@ static gpointer saturn_rx_thread(gpointer arg)
         for (DDC = 0; DDC < VNUMDDC; DDC++)
             SequenceCounter[DDC] = 0;
 
-        printf("starting outgoing DDC data\n");
+        printf("STARTING: %s\n", __FUNCTION__);
 
         while (SDRActive)
         {
@@ -852,7 +832,7 @@ static gpointer saturn_rx_thread(gpointer arg)
                 }
             if (HeaderFound == false)                                        // if rate flag not set
             {
-                printf("Rate word not found when expected. rate= %08x\n", RateWord);
+                printf("%s: Rate word not found when expected. rate= %08x\n", __FUNCTION__, RateWord);
                 exit(1);
             }
 
@@ -871,7 +851,7 @@ static gpointer saturn_rx_thread(gpointer arg)
             {
                 if(*(DMAReadPtr + 7) != 0x80)
                 {
-                    printf("header not found for rate word at addr %x\n", DMAReadPtr);
+                    printf("%s: header not found for rate word at addr %x\n", __FUNCTION__, DMAReadPtr);
                     exit(1);
                 }
                 else                                                                    // analyse word, then process
@@ -934,14 +914,13 @@ static gpointer saturn_rx_thread(gpointer arg)
             }
         }
     }
-    printf("ENDING SATURN receive_thread\n");
+    printf("ENDING: %s\n", __FUNCTION__);
     return NULL;
 }
 
 void saturn_handle_high_priority(unsigned char *UDPInBuffer)
 {
     bool RunBit;                                          // true if "run" bit set
-    uint32_t DDCPhaseIncrement;                           // delta phase for a DDC
     uint8_t Byte, Byte2;                                  // received dat being decoded
     uint32_t LongWord;
     uint16_t Word;
@@ -1008,7 +987,6 @@ void saturn_handle_high_priority(unsigned char *UDPInBuffer)
 void saturn_handle_general_packet(uint8_t *PacketBuffer)
 {
     uint16_t Port;                                  // port number from table
-    int i;
     uint8_t Byte;
 
 //

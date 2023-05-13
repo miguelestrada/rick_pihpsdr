@@ -1,21 +1,20 @@
-/* Copyright (C)
-* 2017 - John Melton, G0ORX/N6LYT
-*
-* This program is free software; you can redistribute it and/or
-* modify it under the terms of the GNU General Public License
-* as published by the Free Software Foundation; either version 2
-* of the License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program; if not, write to the Free Software
-* Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-*
-*/
+/////////////////////////////////////////////////////////////
+//
+// Saturn project: Artix7 FPGA + Raspberry Pi4 Compute Module
+// PCI Express interface from linux on Raspberry pi
+// this application uses C code to emulate HPSDR protocol 1
+//
+// copyright Laurence Barker November 2021
+//
+// Contribution of interfacing to PiHPSDR from N1GP (Rick Koch)
+//
+// licenced under GNU GPL3
+//
+// saturnmain.h:
+// Saturn interface to PiHPSDR
+//
+//////////////////////////////////////////////////////////////
+
 
 void saturn_discovery();
 void start_saturn_receive_thread();

@@ -5,6 +5,9 @@
 // this application uses C code to emulate HPSDR protocol 1
 //
 // copyright Laurence Barker November 2021
+//
+// Contribution of interfacing to PiHPSDR from N1GP (Rick Koch)
+//
 // licenced under GNU GPL3
 //
 // saturnregisters.c:

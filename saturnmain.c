@@ -117,38 +117,49 @@ static mybuffer *buflist[MAXMYBUF];
 
 //
 // Obtain a free buffer. If no one is available allocate
-// 5 new ones. Note these buffer "live" as long as the
+// 4 new ones. Note these buffer "live" as long as the
 // program lives. They are never released. Measurements show
 // that in typical runs, only a handful of buffers is ever
 // allocated.
 //
 static mybuffer *get_my_buffer(int numlist)
 {
-    int i;
+    int i, j = 4; 
     mybuffer *bp=buflist[numlist];
-    while (bp)
-    {
-        if (bp->free)
+    if (bp) 
+    {    
+        while (bp) 
         {
-            // found free buffer. Mark as used and return that one.
-            bp->free=0;
-            return bp;
+            if (bp->free)
+            {
+                // found free buffer. Mark as used and return that one.
+                bp->free=0;
+                return bp;
+            }
+            bp=bp->next;
         }
-        bp=bp->next;
-    }
-    //
-    // no free buffer found, allocate some extra ones
-    // and add to the head of the list
-    //
-    for (i=0; i<5; i++)
-    {
+    }    
+    else 
+    {    
+        j = 1; 
+    }    
+    //   
+    // allocate one buffer, else if no free buffer found (bp == NULL),
+    // allocate some extra ones and add to the head of the list
+    //   
+    for (i=0; i<j; i++) 
+    {    
         bp = malloc(sizeof(mybuffer));
         bp->free=1;
         bp->next = buflist[numlist];
         buflist[numlist]=bp;
         num_buf[numlist]++;
-    }
-    g_print("saturnmain: number of buffer[%d] increased to %d\n", numlist, num_buf[numlist]);
+    }    
+    if (j > 1) 
+        g_print("saturnmain: number of buffer[%d] increased to %d\n", numlist, num_buf[numlist]);
+    else 
+        g_print("saturnmain: number of buffer[%d] set to %d\n", numlist, num_buf[numlist]);
+
     // Mark the first buffer in list as used and return that one.
     buflist[numlist]->free=0;
     return buflist[numlist];
@@ -453,7 +464,7 @@ void saturn_discovery()
             discovered[devices].use_tcp=0;
             discovered[devices].use_routing=0;
             discovered[devices].supported_receivers=2;
-            fprintf(stderr,"discovery: found SATURN device min=%f max=%f\n",
+            fprintf(stderr,"discovery: found saturn device min=%f max=%f\n",
             discovered[devices].frequency_min,
             discovered[devices].frequency_max);
 
@@ -488,7 +499,7 @@ static gpointer saturn_high_priority_thread(gpointer arg)
             usleep(1000);
 
         SequenceCounter = 0;
-        printf("STARTING: %s\n", __FUNCTION__);
+        printf("starting %s\n", __FUNCTION__);
         //
         // this is the main loop. SDR is running. transfer data;
         // also check for changes to DDC enabled, and DDC interleaved
@@ -531,7 +542,7 @@ static gpointer saturn_high_priority_thread(gpointer arg)
                 usleep(50000);                                    // 50ms gap between messages
         }
     }
-    printf("ENDING: %s\n", __FUNCTION__);
+    printf("ending: %s\n", __FUNCTION__);
     return NULL;
 }
 
@@ -611,7 +622,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
             usleep(1000);
 
         SequenceCounter = 0;
-        printf("STARTING: %s\n", __FUNCTION__);
+        printf("starting %s\n", __FUNCTION__);
         while (SDRActive)
         {
             //
@@ -633,7 +644,7 @@ static gpointer saturn_micaudio_thread(gpointer arg)
             saturn_post_micaudio(VMICPACKETSIZE, mybuf);
         }
     }
-    printf("ENDING: %s\n", __FUNCTION__);
+    printf("ending: %s\n", __FUNCTION__);
     return NULL;
 }
 
@@ -749,7 +760,7 @@ static gpointer saturn_rx_thread(gpointer arg)
         for (DDC = 0; DDC < VNUMDDC; DDC++)
             SequenceCounter[DDC] = 0;
 
-        printf("STARTING: %s\n", __FUNCTION__);
+        printf("starting %s\n", __FUNCTION__);
 
         while (SDRActive)
         {
@@ -914,7 +925,7 @@ static gpointer saturn_rx_thread(gpointer arg)
             }
         }
     }
-    printf("ENDING: %s\n", __FUNCTION__);
+    printf("ending: %s\n", __FUNCTION__);
     return NULL;
 }
 

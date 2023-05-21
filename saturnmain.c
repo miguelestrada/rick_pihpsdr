@@ -805,7 +805,7 @@ static gpointer saturn_rx_thread(gpointer arg)
                     memcpy(mybuf->buffer + 16, IQReadPtr[DDC], VIQBYTESPERFRAME);
                     IQReadPtr[DDC] += VIQBYTESPERFRAME;
 
-                    if (DDC < VNUMDDC/2)
+                    if (DDC < 4)
                     {
                       saturn_post_iq_data(DDC, mybuf);
                     }
@@ -815,12 +815,12 @@ static gpointer saturn_rx_thread(gpointer arg)
                       {
                         iovecinst[DDC].iov_base = mybuf->buffer;
                         memcpy(&DestAddr[DDC], &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
-                        Error = sendmsg(SocketData[VPORTDDCIQ0+(DDC-VNUMDDC/2)].Socketid, &datagram[DDC], 0);
+                        Error = sendmsg(SocketData[VPORTDDCIQ0+(DDC-4)].Socketid, &datagram[DDC], 0);
 
                         if (Error == -1)
                         {
                             printf("Send Error, DDC=%d, errno=%d, socket id = %d\n", DDC,
-                              errno, SocketData[VPORTDDCIQ0+(DDC-VNUMDDC/2)].Socketid);
+                              errno, SocketData[VPORTDDCIQ0+(DDC-4)].Socketid);
                             exit( -1 );
                         }
                       }
@@ -990,9 +990,9 @@ void saturn_handle_high_priority(unsigned char *UDPInBuffer)
     SetMOX(IsTXMode);
 
 //
-// now properly decode DDC frequencies
+// now properly decode native XDMA client DDC frequencies
 //
-    for (i=0; i<VNUMDDC/2; i++)
+    for (i=0; i<4; i++)
     {
         LongWord = ntohl(*(uint32_t *)(UDPInBuffer+i*4+9));
         SetDDCFrequency(i, LongWord, true);                   // temporarily set above
@@ -1114,7 +1114,7 @@ void saturn_handle_ddc_specific(unsigned char *UDPInBuffer)
     // be aware an interleaved "odd" DDC will usually be set to disabled, and we need to revert this!
     //
     Word = *(uint16_t*)(UDPInBuffer + 7);                 // get DDC enables 15:0 (note it is already low byte 1st!)
-    for(i=0; i<VNUMDDC/2; i++)
+    for(i=0; i<4; i++)
     {
         Enabled = (bool)(Word & 1);                        // get enable state
         Byte1 = *(uint8_t*)(UDPInBuffer+i*6+17);          // get ADC for this DDC

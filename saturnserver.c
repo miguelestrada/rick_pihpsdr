@@ -271,7 +271,7 @@ void* saturn_server(void *arg)
     38,                                           // protocol version 3.8
     20,                                           // this SDR firmware version. >17 to enable QSK
     0,0,0,0,0,0,                                  // Mercury, Metis, Penny version numbers
-    5,                                            // 6 DDC's for network client
+    6,                                            // 6 DDC's for network client
     1,                                            // phase word
     0,                                            // endian mode
     0,0,                                          // beta version, reserved byte (total 25 useful bytes)
@@ -443,7 +443,7 @@ void* saturn_server(void *arg)
         // general packet. Get the port numbers and establish listener threads
         //
         case 0:
-          printf("P2 General packet to SDR, size= %d\n", size);
+          //printf("P2 General packet to SDR, size= %d\n", size);
           //
           // get "from" MAC address and port; this is where the data goes back to
           //
@@ -565,12 +565,12 @@ void *IncomingHighPriority(void *arg)                   // listener thread
         StartBitReceived = false;
       }
 //
-// now properly decode DDC frequencies
+// now properly decode network client DDC frequencies
 //
-      for (i=0; i<VNUMDDC/2; i++)
+      for (i=0; i<6; i++)
       {
         LongWord = ntohl(*(uint32_t *)(UDPInBuffer+i*4+9));
-        SetDDCFrequency(i+VNUMDDC/2, LongWord, true);                   // temporarily set above
+        SetDDCFrequency(i+4, LongWord, true);                   // temporarily set above
       }
 #if 0 //RRK, not network client
       IsTXMode = (bool)(Byte&2);
@@ -693,21 +693,21 @@ void *IncomingDDCSpecific(void *arg)                    // listener thread
       // be aware an interleaved "odd" DDC will usually be set to disabled, and we need to revert this!
       //
       Word = *(uint16_t*)(UDPInBuffer + 7);                 // get DDC enables 15:0 (note it is already low byte 1st!)
-      for(i=0; i<VNUMDDC/2; i++)
+      for(i=0; i<6; i++)
       {
         Enabled = (bool)(Word & 1);                        // get enable state
         Byte1 = *(uint8_t*)(UDPInBuffer+i*6+17);          // get ADC for this DDC
         Word2 = *(uint16_t*)(UDPInBuffer+i*6+18);         // get sample rate for this DDC
         Word2 = ntohs(Word2);                             // swap byte order
         Byte2 = *(uint8_t*)(UDPInBuffer+i*6+22);          // get sample size for this DDC
-        SetDDCSampleSize(i+VNUMDDC/2, Byte2);
+        SetDDCSampleSize(i+4, Byte2);
         if(Byte1 == 0)
           ADC = eADC1;
         else if(Byte1 == 1)
           ADC = eADC2;
         else if(Byte1 == 2)
           ADC = eTXSamples;
-        SetDDCADC(i+VNUMDDC/2, ADC);
+        SetDDCADC(i+4, ADC);
 
         Interleaved = false;                                 // assume no synch
         // finally DDC synchronisation: my implementation it seems isn't what the spec intended!
@@ -771,7 +771,7 @@ void *IncomingDDCSpecific(void *arg)                    // listener thread
                 break;
 
         }
-        SetP2SampleRate(i+VNUMDDC/2, Enabled, Word2, Interleaved);
+        SetP2SampleRate(i+4, Enabled, Word2, Interleaved);
         Word = Word >> 1;                                 // move onto next DDC enabled bit
       }
       // now set register, and see if any changes made; reuse Dither again

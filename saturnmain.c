@@ -40,6 +40,8 @@
 
 #include "saturnregisters.h"              // register I/O for Saturn
 #include "saturndrivers.h"                      // version I/O for Saturn
+#include "saturnmain.h"
+#include "saturnserver.h"
 
 #include "discovered.h"
 #include "new_protocol.h"
@@ -53,7 +55,7 @@ extern sem_t CodecRegMutex;                 // protect writes to codec
 bool IsTXMode;                              // true if in TX
 bool SDRActive;                             // true if this SDR is running at the moment
 bool Exiting = false;
-
+extern bool ServerActive;
 
 #define SDRBOARDID 1                        // Hermes
 #define SDRSWVERSION 1                      // version of this software
@@ -155,10 +157,8 @@ static mybuffer *get_my_buffer(int numlist)
         buflist[numlist]=bp;
         num_buf[numlist]++;
     }    
-    if (j > 1) 
-        g_print("saturnmain: number of buffer[%d] increased to %d\n", numlist, num_buf[numlist]);
-    else 
-        g_print("saturnmain: number of buffer[%d] set to %d\n", numlist, num_buf[numlist]);
+    g_print("saturnmain: number of buffer[%s] %s to %d\n", numlist==DDCMYBUF?"DDC":numlist==MICMYBUF?"MIC":"HP"
+                                                         , (j>1)?"increased":"set", num_buf[numlist]);
 
     // Mark the first buffer in list as used and return that one.
     buflist[numlist]->free=0;
@@ -282,7 +282,8 @@ void saturn_handle_duc_iq(uint8_t *UDPInBuffer)
         DepthDUC = ReadFIFOMonitorChannel(eTXDUCDMA, &FIFDUCOOverflow);       // read the FIFO free locations
     }
     // copy data from UDP Buffer & DMA write it
-//            memcpy(DUCIQBasePtr, UDPInBuffer + 4, VDMADUCTRANSFERSIZE);                // copy out I/Q samples
+    memcpy(DUCIQBasePtr, UDPInBuffer + 4, VDMADUCTRANSFERSIZE);                // copy out I/Q samples
+#if 0 // no swapping when not coming in from network
     // need to swap I & Q samples on replay
     SrcPtr = (UDPInBuffer + 4);
     DestPtr = DUCIQBasePtr;
@@ -296,6 +297,7 @@ void saturn_handle_duc_iq(uint8_t *UDPInBuffer)
         *DestPtr++ = *(SrcPtr+2);
         SrcPtr += 6;                                        // point at next source sample
     }
+#endif
     DMAWriteToFPGA(DMADUCWritefile_fd, DUCIQBasePtr, VDMADUCTRANSFERSIZE, VADDRDUCSTREAMWRITE);
     return;
 }
@@ -382,15 +384,17 @@ int saturn_init_ddc_iq()
     OpenXDMADriver();
     CodecInitialise();
     InitialiseDACAttenROMs();
-    InitialiseCWKeyerRamp();
+    InitialiseCWKeyerRamp(true, 5000);
     SetCWSidetoneEnabled(true);
     SetTXProtocol(true);                                              // set to protocol 2
     SetTXModulationSource(eIQData);                                   // disable debug options
     //HandlerSetEERMode(false);                                         // no EER
-    SetByteSwapping(false);                                            // h/w to generate NOT network byte order
+    SetByteSwapping(true);                                            // h/w to generate NOT network byte order
     SetSpkrMute(false);
     SetTXAmplitudeScaling(VCONSTTXAMPLSCALEFACTOR);
     SetTXEnable(true);
+    EnableAlexManualFilterSelect(true);
+    SetBalancedMicInput(false);
     return EXIT_SUCCESS;
 }
 
@@ -402,6 +406,8 @@ void saturn_exit()
     //
     printf("%s: Exiting\n", __FUNCTION__);
     Exiting = true;
+    SDRActive = false;
+    ServerActive = false;
     sem_destroy(&DDCInSelMutex);
     sem_destroy(&DDCResetFIFOMutex);
     sem_destroy(&RFGPIOMutex);
@@ -422,7 +428,7 @@ void saturn_discovery()
         FILE *fp;
         uint8_t *mac = discovered[devices].info.network.mac_address;
 
-        for(i=0; i<3; i++)
+        for(i=0; i<MAXMYBUF; i++)
         {
             num_buf[i] = 0;
             buflist[i] = NULL;
@@ -660,11 +666,11 @@ void start_saturn_receive_thread()
     }
 }
 
+extern struct ThreadSocketData SocketData[VPORTTABLESIZE];
+extern struct sockaddr_in reply_addr;
+
 static gpointer saturn_rx_thread(gpointer arg)
 {
-    uint32_t SequenceCounter[VNUMDDC];                          // UDP sequence count
-
-
     g_print( "%s\n", __FUNCTION__);
 
 //
@@ -679,6 +685,17 @@ static gpointer saturn_rx_thread(gpointer arg)
     uint32_t RegisterValue;
     bool FIFOOverflow;
     int DDC;                                                    // iterator
+    int Error;
+
+//
+// variables for outgoing UDP frame
+//
+    struct ThreadSocketData *ThreadData;
+    struct sockaddr_in DestAddr[VNUMDDC];
+    struct iovec iovecinst[VNUMDDC];                            // instance of iovec
+    struct msghdr datagram[VNUMDDC];
+    uint32_t SequenceCounter[VNUMDDC];                          // UDP sequence count
+
 
 //
 // variables for analysing a DDC frame
@@ -740,13 +757,6 @@ static gpointer saturn_rx_thread(gpointer arg)
 // when not enough data, read more.
 //
     //
-    // initialise first two receivers
-    //
-    SetP2SampleRate(2, TRUE, 48, FALSE);
-    SetP2SampleRate(3, TRUE, 48, FALSE);
-    WriteP2DDCRateRegister();
-
-    //
     // enable Saturn DDC to transfer data
     //
     printf("%s: enable data transfer\n", __FUNCTION__);
@@ -758,7 +768,17 @@ static gpointer saturn_rx_thread(gpointer arg)
             usleep(1000);
 
         for (DDC = 0; DDC < VNUMDDC; DDC++)
+        {
             SequenceCounter[DDC] = 0;
+            memcpy(&DestAddr[DDC], &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
+            memset(&iovecinst[DDC], 0, sizeof(struct iovec));
+            memset(&datagram[DDC], 0, sizeof(struct msghdr));
+            iovecinst[DDC].iov_len = VDDCPACKETSIZE;
+            datagram[DDC].msg_iov = &iovecinst[DDC];
+            datagram[DDC].msg_iovlen = 1;
+            datagram[DDC].msg_name = &DestAddr[DDC];                   // MAC addr & port to send to
+            datagram[DDC].msg_namelen = sizeof(DestAddr);
+        }
 
         printf("starting %s\n", __FUNCTION__);
 
@@ -785,7 +805,30 @@ static gpointer saturn_rx_thread(gpointer arg)
                     memcpy(mybuf->buffer + 16, IQReadPtr[DDC], VIQBYTESPERFRAME);
                     IQReadPtr[DDC] += VIQBYTESPERFRAME;
 
-                    saturn_post_iq_data(DDC, mybuf);
+                    if (DDC < VNUMDDC/2)
+                    {
+                      saturn_post_iq_data(DDC, mybuf);
+                    }
+                    else
+                    {
+                      if (ServerActive)
+                      {
+                        iovecinst[DDC].iov_base = mybuf->buffer;
+                        memcpy(&DestAddr[DDC], &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
+                        Error = sendmsg(SocketData[VPORTDDCIQ0+(DDC-VNUMDDC/2)].Socketid, &datagram[DDC], 0);
+
+                        if (Error == -1)
+                        {
+                            printf("Send Error, DDC=%d, errno=%d, socket id = %d\n", DDC,
+                              errno, SocketData[VPORTDDCIQ0+(DDC-VNUMDDC/2)].Socketid);
+                            exit( -1 );
+                        }
+                      }
+		      else
+		        SequenceCounter[DDC] = 0;
+
+                      mybuf->free = 1;
+                    }
                 }
                 //
                 // now copy any residue to the start of the buffer (before the data copy in point)
@@ -949,7 +992,7 @@ void saturn_handle_high_priority(unsigned char *UDPInBuffer)
 //
 // now properly decode DDC frequencies
 //
-    for (i=0; i<VNUMDDC; i++)
+    for (i=0; i<VNUMDDC/2; i++)
     {
         LongWord = ntohl(*(uint32_t *)(UDPInBuffer+i*4+9));
         SetDDCFrequency(i, LongWord, true);                   // temporarily set above
@@ -1071,7 +1114,7 @@ void saturn_handle_ddc_specific(unsigned char *UDPInBuffer)
     // be aware an interleaved "odd" DDC will usually be set to disabled, and we need to revert this!
     //
     Word = *(uint16_t*)(UDPInBuffer + 7);                 // get DDC enables 15:0 (note it is already low byte 1st!)
-    for(i=0; i<VNUMDDC; i++)
+    for(i=0; i<VNUMDDC/2; i++)
     {
         Enabled = (bool)(Word & 1);                        // get enable state
         Byte1 = *(uint8_t*)(UDPInBuffer+i*6+17);          // get ADC for this DDC

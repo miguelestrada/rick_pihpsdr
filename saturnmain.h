@@ -15,6 +15,10 @@
 //
 //////////////////////////////////////////////////////////////
 
+#ifndef __saturnmain_h
+#define __saturnmain_h
+
+#include "saturnregisters.h"
 
 void saturn_discovery();
 void start_saturn_receive_thread();
@@ -27,4 +31,7 @@ void saturn_handle_ddc_specific(unsigned char *receive_specific_buffer);
 void saturn_handle_duc_specific(unsigned char *transmit_specific_buffer);
 void saturn_handle_duc_iq(uint8_t *UDPInBuffer);
 void saturn_handle_high_priority(uint8_t *UDPInBuffer);
+void start_saturn_server();
 void saturn_exit();
+
+#endif

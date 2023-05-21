@@ -78,14 +78,17 @@ SATURN_OPTIONS=-D SATURN
 SATURN_SOURCES= \
 saturndrivers.c \
 saturnregisters.c \
+saturnserver.c \
 saturnmain.c
 SATURN_HEADERS= \
 saturndrivers.h \
 saturnregisters.h \
+saturnserver.h \
 saturnmain.h
 SATURN_OBJS= \
 saturndrivers.o \
 saturnregisters.o \
+saturnserver.o \
 saturnmain.o
 endif
 

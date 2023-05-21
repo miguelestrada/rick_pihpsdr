@@ -29,6 +29,25 @@
 sem_t DDCInSelMutex;
 sem_t RFGPIOMutex;
 
+//START codecwrite.c
+sem_t CodecRegMutex;
+
+//
+// 8 bit Codec register write over the AXILite bus via SPI
+// // using simple SPI writer IP
+// given 7 bit register address and 9 bit data
+//
+void CodecRegisterWrite(uint32_t Address, uint32_t Data)
+{
+	uint32_t WriteData;
+
+	WriteData = (Address << 9) | (Data & 0x01FFUL);
+    sem_wait(&CodecRegMutex);                       // get protected access
+	RegisterWrite(VADDRCODECSPIREG, WriteData);  	// and write to it
+	//printf("Codec write: send %03x to Codec register address %02x, written=%04x\n", Data, Address, WriteData);
+    sem_post(&CodecRegMutex);                       // clear protected access
+}
+//END codecwrite.c
 
 //
 // ROMs for DAC Current Setting and 0.5dB step digital attenuator
@@ -75,17 +94,13 @@ uint32_t GAlexCoarseAttenuatorBits;                 // Alex coarse atten NOT USE
 bool GAlexManualFilterSelect;                       // true if manual (remote CPU) filter setting
 bool GEnableAlexTXRXRelay;                          // true if TX allowed
 bool GCWKeysReversed;                               // true if keys reversed. Not yet used but will be
-bool GCWKeyerBreakIn;                               // true if full break-in
 unsigned int GCWKeyerSpeed;                         // Keyer speed in WPM. Not yet used
 unsigned int GCWKeyerMode;                          // Keyer Mode. True if mode B. Not yet used
 unsigned int GCWKeyerWeight;                        // Keyer Weight. Not yet used
 bool GCWKeyerSpacing;                               // Keyer spacing
 bool GCWIambicKeyerEnabled;                         // true if iambic keyer is enabled
-bool GCWKeyerEnabled;                               // true if iambic keyer is enabled
 uint32_t GIambicConfigReg;                          // copy of iambic comfig register
 uint32_t GCWKeyerSetup;                             // keyer control register
-uint32_t GKeyerSidetoneVol;                         // sidetone volume for CW TX
-bool GCWBreakInEnabled;                             // true if full break-in enabled
 uint32_t GClassEPWMMin;                             // min class E PWM. NOT USED at present.
 uint32_t GClassEPWMMax;                             // max class E PWM. NOT USED at present.
 uint32_t GCodecConfigReg;                           // codec configuration
@@ -104,7 +119,7 @@ ESampleRate GDUCSampleRate;                         // P2. TX sample rate. NOT U
 unsigned int GDUCSampleSize;                        // P2. DUC # sample bits. NOT USED YET
 unsigned int GDUCPhaseShift;                        // P2. DUC phase shift. NOT USED YET.
 bool GSpeakerMuted;                                 // P2. True if speaker muted.
-bool GCWXMode;                                      // P2. Not yet used.
+bool GCWXMode;                                      // True if in computer generated CWX mode
 bool GCWXDot;                                       // True if computer generated CW Dot.
 bool GCWXDash;                                      // True if computer generated CW Dash.
 bool GDashPressed;                                  // P2. True if dash input pressed.
@@ -244,9 +259,11 @@ uint32_t DDCRegisters[VNUMDDC] =
 //
 // Keyer setup register defines
 //
-#define VCWKEYERENABLE 31                               // enble bit
+#define VCWKEYERENABLE 31                               // enable bit
+#define VCWKEYERDELAY 0                                 // delay bits 7:0
 #define VCWKEYERHANG 8                                  // hang time is 17:8
 #define VCWKEYERRAMP 18                                 // ramp time
+#define VRAMPSIZE 2048                                  // max ramp length in words
 
 //
 // Iambic config register defines
@@ -276,26 +293,6 @@ uint32_t DDCRegisters[VNUMDDC] =
 #define VTXCONFIGIQDEINTERLEAVEBIT 30
 #define VTXCONFIGIQSTREAMENABLED 31
 
-//
-// semaphores to protect registers that are accessed from several threads
-//
-sem_t CodecRegMutex;
-
-//
-// 8 bit Codec register write over the AXILite bus via SPI
-// // using simple SPI writer IP
-// given 7 bit register address and 9 bit data
-//
-void CodecRegisterWrite(uint32_t Address, uint32_t Data)
-{
-    uint32_t WriteData;
-
-    WriteData = (Address << 9) | (Data & 0x01FFUL);
-    sem_wait(&CodecRegMutex);                       // get protected access
-    RegisterWrite(VADDRCODECSPIREG, WriteData);     // and write to it
-    //printf("Codec write: send %03x to Codec register address %02x, written=%04x\n", Data, Address, WriteData);
-    sem_post(&CodecRegMutex);                       // clear protected access
-}
 
 
 //
@@ -307,7 +304,6 @@ void InitialiseDACAttenROMs(void)
 {
     unsigned int Level;                         // input demand value
     double DesiredAtten;                        // desired attenuation in dB
-    double StepAtten;                           // step attenuation in 0.5dB steps
     unsigned int StepValue;                     // integer step atten drive value
     double ResidualAtten;                       // atten to go in the current setting DAC
     unsigned int DACDrive;                      // int value to go to DAC ROM
@@ -318,12 +314,13 @@ void InitialiseDACAttenROMs(void)
     DACCurrentROM[0] = 0;                       // min level
     DACStepAttenROM[0] = 63;                    // max atten
 
-    for (Level = 1; Level < 255; Level++)
+    for (Level = 1; Level < 256; Level++)
     {
-        DesiredAtten = 20.0*log10(255/Level);   // this is the atten value we want after the high speed DAC
-        StepAtten = (unsigned int)(fmin((int)(DesiredAtten/0.5), 63)*0.5);     // what step atten should be set to
-        StepValue = (unsigned int)(StepAtten * 2.0);        // 6 bit drive setting to achieve that atten
-        ResidualAtten = DesiredAtten - StepAtten;           // this needs to be achieved through the current setting drive
+        DesiredAtten = 20.0*log10(255.0/(double)Level);     // this is the atten value we want after the high speed DAC
+        StepValue = (int)(2.0*DesiredAtten);                // 6 bit step atten should be set to
+        if(StepValue > 63)                                  // clip to 6 bits
+            StepValue = 63;
+        ResidualAtten = DesiredAtten - ((double)StepValue * 0.5);        // this needs to be achieved through the current setting drive
         DACDrive = (unsigned int)(255.0/pow(10.0,(ResidualAtten/20.0)));
         DACCurrentROM[Level] = DACDrive;
         DACStepAttenROM[Level] = StepValue;
@@ -331,15 +328,6 @@ void InitialiseDACAttenROMs(void)
 }
 
 
-//
-// InitialiseCWKeyerRamp(void)
-// calculates an "S" shape ramp curve and loads into RAM
-// needs to be called before keyer enabled!
-//
-void InitialiseCWKeyerRamp(void)
-{
-
-}
 
 
 
@@ -959,6 +947,7 @@ void EnableAlexManualFilterSelect(bool IsManual)
 // P2: provides a 16 bit word with all of the Alex settings for a single RX
 // must be formatted according to the Alex specification
 // RX=0 or 1: RX1; RX=2: RX2
+// must be enabled by calling EnableAlexManualFilterSelect(true) first!
 //
 void AlexManualRXFilters(unsigned int Bits, int RX)
 {
@@ -980,7 +969,7 @@ void AlexManualRXFilters(unsigned int Bits, int RX)
         if(Register != GAlexRXRegister)                     // write back if changed
         {
             GAlexRXRegister = Register;
-            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
+            RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXRXREG, Register);  // and write to it
         }
     }
 }
@@ -1000,6 +989,7 @@ void DisableAlexTRRelay(bool IsDisabled)
 // AlexManualTXFilters(unsigned int Bits)
 // P2: provides a 16 bit word with all of the Alex settings for TX
 // must be formatted according to the Alex specification
+// must be enabled by calling EnableAlexManualFilterSelect(true) first!
 //
 void AlexManualTXFilters(unsigned int Bits)
 {
@@ -1010,7 +1000,7 @@ void AlexManualTXFilters(unsigned int Bits)
         if(Register != GAlexTXRegister)                     // write back if changed
         {
             GAlexTXRegister = Register;
-            //        RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
+            RegisterWrite(VADDRALEXSPIREG+VOFFSETALEXTXREG, Register);  // and write to it
         }
     }
 }
@@ -1100,7 +1090,7 @@ void SetMicBoost(bool EnableBoost)
     if(Register != GCodecAnaloguePath)                  // only write back if changed
     {
         GCodecAnaloguePath = Register;
-//        CodecRegisterWrite(VCODECANALOGUEPATHREG, Register);
+        CodecRegisterWrite(VCODECANALOGUEPATHREG, Register);
     }
 }
 
@@ -1122,7 +1112,7 @@ void SetMicLineInput(bool IsLineIn)
     if(Register != GCodecAnaloguePath)                  // only write back if changed
     {
         GCodecAnaloguePath = Register;
-//        CodecRegisterWrite(VCODECANALOGUEPATHREG, Register);
+        CodecRegisterWrite(VCODECANALOGUEPATHREG, Register);
     }
 }
 
@@ -1204,7 +1194,7 @@ void SetCodecLineInGain(unsigned int Gain)
     if(Register != GCodecLineGain)                      // only write back if changed
     {
         GCodecLineGain = Register;
-//        CodecRegisterWrite(VCODECLLINEVOLREG, Register);
+        CodecRegisterWrite(VCODECLLINEVOLREG, Register);
     }
 }
 
@@ -1314,85 +1304,6 @@ void SetCWIambicKeyer(uint8_t Speed, uint8_t Weight, bool ReverseKeys, bool Mode
 
 
 //
-// SetCWKeyerReversed(bool Reversed)
-// if set, swaps the paddle inputs
-// not yet used, but will be
-//
-void SetCWKeyerReversed(bool Reversed)
-{
-    GCWKeysReversed = Reversed;                     // just save it for now
-}
-
-
-//
-// SetCWKeyerSpeed(unsigned int Speed)
-// sets the CW keyer speed, in WPM
-// not yet used, but will be
-//
-void SetCWKeyerSpeed(unsigned int Speed)
-{
-    GCWKeyerSpeed = Speed;                          // just save it for now
-}
-
-
-//
-// SetCWKeyerMode(unsigned int Mode)
-// sets the CW keyer mode
-// not yet used, but will be
-//
-void SetCWKeyerMode(unsigned int Mode)
-{
-    GCWKeyerMode = Mode;                            // just save it for now
-}
-
-
-//
-// SetCWKeyerWeight(unsigned int Weight)
-// sets the CW keyer weight value (7 bits)
-// not yet used, but will be
-//
-void SetCWKeyerWeight(unsigned int Weight)
-{
-    GCWKeyerWeight = Weight;                        // just save it for now
-}
-
-
-//
-// SetCWKeyerEnabled(bool Enabled)
-// sets CW keyer spacing bit
-//
-void SetCWKeyerSpacing(bool Spacing)
-{
-    GCWKeyerSpacing = Spacing;
-}
-
-
-//
-// SetCWKeyerEnabled(bool Enabled)
-// enables or disables the CW keyer
-// not yet used, but will be
-//
-void SetCWKeyerEnabled(bool Enabled)
-{
-    GCWKeyerEnabled = Enabled;
-}
-
-
-//
-// SetCWKeyerBits(bool Enabled, bool Reversed, bool ModeB, bool Strict, bool BreakIn)
-// set several bits associated with the CW iambic keyer
-//
-void SetCWKeyerBits(bool Enabled, bool Reversed, bool ModeB, bool Strict, bool BreakIn)
-{
-    GCWKeyerEnabled = Enabled;
-    GCWKeysReversed = Reversed;                     // just save it for now
-    GCWKeyerMode = ModeB;                            // just save it for now
-    GCWKeyerSpacing = Strict;
-    GCWKeyerBreakIn = BreakIn;
-}
-
-
-//
 // void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot)
 // setup CWX (host generated dot and dash)
 //
@@ -1473,6 +1384,70 @@ void SetRXDDCEnabled(bool IsEnabled)
     sem_post(&DDCInSelMutex);
 }
 
+//
+// InitialiseCWKeyerRamp(bool Protocol2, uint32_t Length_us)
+// calculates an "S" shape ramp curve and loads into RAM
+// needs to be called before keyer enabled!
+// parameter is length in microseconds; typically 1000-5000
+// setup ramp memory and rampl length fields
+//
+void InitialiseCWKeyerRamp(bool Protocol2, uint32_t Length_us)
+{
+    const double a0 = 0.35875;
+    const double a1 = -0.48829;
+    const double a2 = 0.14128;
+    const double a3 = -0.01168;
+    double LargestSample;
+    double Fraction;                         // fractional position in ramp
+    double SamplePeriod;                     // sample period in us
+    double Length;                           // length required in us
+    uint32_t RampLength;                    // integer length in WORDS not bytes!
+    double RampSample[VRAMPSIZE];            // array samples
+    uint32_t Cntr;
+    uint32_t Sample;                        // ramp sample value
+    uint32_t Register;
+
+// work out required length    
+    if(Protocol2)
+        SamplePeriod = 1000.0/192.0;
+    else
+        SamplePeriod = 1000.0/48.0;
+    RampLength = (uint32_t)(((double)Length_us / SamplePeriod) + 1);
+//
+// calculate basic ramp shape
+// see "CW shaping in DSP software" by Alex Shovkoplyas VE3NEA)
+//
+    RampSample[0] = 0.0;
+    for(Cntr=1; Cntr < RampLength; Cntr++)
+    {
+        Fraction = (double)Cntr / (double)RampLength;
+        RampSample[Cntr] = RampSample[Cntr-1] +a0 +a1*cos(2.0*M_PI*Fraction) 
+                           +a2*cos(4.0*M_PI*Fraction) +a3*cos(6.0*M_PI*Fraction);
+    }
+    LargestSample = RampSample[RampLength-1];
+//
+// now go through and rescale to 2^23-1 max
+// that's the peak amplitude for I/Q in Saturn, either protocol
+//
+    for(Cntr=0; Cntr < RampLength; Cntr++)
+    {
+        Sample = (uint32_t)((RampSample[Cntr]/LargestSample) * 8388607.0);
+        RegisterWrite(VADDRCWKEYERRAM + 4*Cntr, Sample);
+//        printf("sample: %d = %d\n", Cntr, Sample);
+    }
+    for(Cntr = RampLength; Cntr < VRAMPSIZE; Cntr++)
+        RegisterWrite(VADDRCWKEYERRAM + 4*Cntr, 8388607);
+
+//
+// finally write the ramp length
+//
+    Register = GCWKeyerSetup;                    // get current settings
+    Register &= 0x8003FFFF;                      // strip out ramp bits
+    Register |= ((RampLength << 2) << VCWKEYERRAMP);        // byte end address
+    GCWKeyerSetup = Register;                    // store it back
+    RegisterWrite(VADDRKEYERCONFIGREG, Register);  // and write to it
+
+}
 
 
 
@@ -1493,8 +1468,15 @@ void EnableCW (bool Enabled)
     if(Register != GCWKeyerSetup)                    // write back if different
     {
         GCWKeyerSetup = Register;                    // store it back
-//        RegisterWrite(VADDRKEYERCONFIGREG, Register);  // and write to it
+        RegisterWrite(VADDRKEYERCONFIGREG, Register);  // and write to it
     }
+    //
+    // now set I/Q modulation source
+    //
+    if(Enabled)
+        SetTXModulationSource(eCWKeyer);                                  // CW source
+    else
+        SetTXModulationSource(eIQData);                                   // else IQ source
 }
 
 
@@ -1508,21 +1490,22 @@ void SetCWSidetoneEnabled(bool Enabled)
     uint32_t Register;
     if(GSidetoneEnabled != Enabled)                     // only act if bit changed
     {
+        GSidetoneEnabled = Enabled;
         Register = GCodecConfigReg;                     // get current settings
         Register &= 0x0000FFFF;                         // remove old volume bits
         if(Enabled)
-            Register |= (GSidetoneVolume & 0xFF) << 8;  // add back new bits; resize to 16 bits
+            Register |= (GSidetoneVolume & 0xFF) << 24; // add back new bits; resize to 16 bits
         GCodecConfigReg = Register;                     // store it back
-//        RegisterWrite(VADDRCODECCONFIGREG, Register); // and write to it
+        RegisterWrite(VADDRCODECCONFIGREG, Register);   // and write to it
     }
 }
 
 
 //
-// SetCWSidetoneVol(unsigned int Volume)
+// SetCWSidetoneVol(uint8_t Volume)
 // sets the sidetone volume level (7 bits, unsigned)
 //
-void SetCWSidetoneVol(unsigned int Volume)
+void SetCWSidetoneVol(uint8_t Volume)
 {
     uint32_t Register;
 
@@ -1532,9 +1515,9 @@ void SetCWSidetoneVol(unsigned int Volume)
         Register = GCodecConfigReg;                     // get current settings
         Register &= 0x0000FFFF;                         // remove old volume bits
         if(GSidetoneEnabled)
-            Register |= (GSidetoneVolume & 0xFF) << 8;  // add back new bits; resize to 16 bits
+            Register |= (GSidetoneVolume & 0xFF) << 24; // add back new bits; resize to 16 bits
         GCodecConfigReg = Register;                     // store it back
-//        RegisterWrite(VADDRCODECCONFIGREG, Register);  // and write to it
+        RegisterWrite(VADDRCODECCONFIGREG, Register);   // and write to it
     }
 }
 
@@ -1553,7 +1536,7 @@ void SetCWPTTDelay(unsigned int Delay)
     if(Register != GCWKeyerSetup)                       // write back if different
     {
         GCWKeyerSetup = Register;                       // store it back
-//        RegisterWrite(VADDRKEYERCONFIGREG, Register);  // and write to it
+        RegisterWrite(VADDRKEYERCONFIGREG, Register);   // and write to it
     }
 }
 
@@ -1573,7 +1556,7 @@ void SetCWHangTime(unsigned int HangTime)
     if(Register != GCWKeyerSetup)                    // write back if different
     {
         GCWKeyerSetup = Register;                    // store it back
-//        RegisterWrite(VADDRKEYERCONFIGREG, Register);  // and write to it
+        RegisterWrite(VADDRKEYERCONFIGREG, Register);   // and write to it
     }
 }
 
@@ -1590,28 +1573,17 @@ void SetCWSidetoneFrequency(unsigned int Frequency)
     uint32_t DeltaPhase;                            // DDS delta phase value
     double fDeltaPhase;                             // delta phase as a float
 
-    fDeltaPhase = (double)(2^16) * (double)Frequency / (double) VCODECSAMPLERATE;
+    fDeltaPhase = 65536.0 * (double)Frequency / (double) VCODECSAMPLERATE;
     DeltaPhase = ((uint32_t)fDeltaPhase) & 0xFFFF;
 
     Register = GCodecConfigReg;                     // get current settings
-    Register &= 0x0000FFFF;                         // remove old bits
-    Register |= DeltaPhase << 16;                   // add back new bits
+    Register &= 0xFFFF0000;                             // remove old bits
+    Register |= DeltaPhase;                             // add back new bits
     if(Register != GCodecConfigReg)                 // write back if different
     {
         GCodecConfigReg = Register;                 // store it back
-//        RegisterWrite(VADDRCODECCONFIGREG, Register);  // and write to it
+        RegisterWrite(VADDRCODECCONFIGREG, Register);   // and write to it
     }
-}
-
-
-//
-// SetCWBreakInEnabled(bool Enabled)
-// enables or disables full CW break-in
-// I don't think this has any effect
-//
-void SetCWBreakInEnabled(bool Enabled)
-{
-    GCWBreakInEnabled = Enabled;
 }
 
 
@@ -1806,16 +1778,6 @@ void SetDUCPhaseShift(unsigned int Value)
 }
 
 
-//
-// SetCWKeys(bool CWXMode, bool Dash, bool Dot)
-// sets the CW key state from SDR application
-//
-void SetCWKeys(bool CWXMode, bool Dash, bool Dot)
-{
-    GCWXMode = CWXMode;                                     // just save these 3 for now
-    GDashPressed =Dash;
-    GDotPressed = Dot;
-}
 
 
 //
@@ -1864,7 +1826,7 @@ void ReadStatusRegister(void)
 {
     uint32_t StatusRegisterValue = 0;
 
-//    StatusRegisterValue = RegisterRead(VADDRSTATUSREG);
+    StatusRegisterValue = RegisterRead(VADDRSTATUSREG);
     GStatusRegister = StatusRegisterValue;                        // save to global
 }
 
@@ -1946,7 +1908,7 @@ unsigned int GetADCOverflow(void)
 {
     unsigned int Result = 0;
 
-//  Result = RegisterRead(VADDRADCOVERFLOWBASE);
+    Result = RegisterRead(VADDRADCOVERFLOWBASE);
     return (Result & 0x3);
 }
 
@@ -1976,7 +1938,7 @@ unsigned int GetAnalogueIn(unsigned int AnalogueSelect)
 {
     unsigned int Result = 0;
     AnalogueSelect &= 7;                                        // limit to 3 bits
-//  Result = RegisterRead(VADDRALEXADCBASE + AnalogueSelect);
+    Result = RegisterRead(VADDRALEXADCBASE + 4*AnalogueSelect);
     return Result;
 }
 
@@ -2156,7 +2118,7 @@ void SetTXModulationTestSourceFrequency (unsigned int Freq)
     if(Register != TXModulationTestReg)                    // write back if different
     {
         TXModulationTestReg = Register;                    // store it back
-//        RegisterWrite(VADDRTXMODTESTREG, Register);  // and write to it
+        RegisterWrite(VADDRTXMODTESTREG, Register);  // and write to it
     }
 }
 

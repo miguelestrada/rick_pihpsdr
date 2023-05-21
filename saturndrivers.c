@@ -40,6 +40,7 @@
 #define VMEMBUFFERSIZE 32768										// memory buffer to reserve
 #define AXIBaseAddress 0x10000									// address of StreamRead/Writer IP
 
+// START hwaccess.c
 //
 // mem read/write variables:
 //
@@ -158,7 +159,7 @@ void RegisterWrite(uint32_t Address, uint32_t Data)
     if (nsent != sizeof(Data))
         printf("ERROR: Write: addr=0x%08X   error=%s\n",Address, strerror(errno));
 }
-
+// END hwaccess.c
 
 
 sem_t DDCResetFIFOMutex;

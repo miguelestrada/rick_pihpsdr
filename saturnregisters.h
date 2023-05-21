@@ -32,10 +32,6 @@ typedef int bool;
 //START OutDDCIQ.h
 #define VDDCPACKETSIZE 1444             // each DDC I/Qpacket
 
-//
-// MOX register
-//
-extern bool MOXAsserted;                                   // true if MOX as asserted
 
 //
 // protocol 2 handler for outgoing DDC I/Q data Packet from SDR
@@ -68,9 +64,10 @@ void CodecRegisterWrite(uint32_t Address, uint32_t Data);
 //
 // open connection to the XDMA device driver for register and DMA access
 //
+//
+// open connection to the XDMA device driver for register and DMA access
+//
 int OpenXDMADriver(void);
-
-
 
 
 //
@@ -79,7 +76,7 @@ int OpenXDMADriver(void);
 // fd: file device (an open file)
 // SrcData: pointer to memory block to transfer
 // Length: number of bytes to copy
-// AXIAddr: offset address in the FPGA window
+// AXIAddr: offset address in the FPGA window 
 //
 int DMAWriteToFPGA(int fd, unsigned char*SrcData, uint32_t Length, uint32_t AXIAddr);
 
@@ -91,7 +88,7 @@ int DMAWriteToFPGA(int fd, unsigned char*SrcData, uint32_t Length, uint32_t AXIA
 // fd: file device (an open file)
 // DestData: pointer to memory block to transfer
 // Length: number of bytes to copy
-// AXIAddr: offset address in the FPGA window
+// AXIAddr: offset address in the FPGA window 
 //
 int DMAReadFromFPGA(int fd, unsigned char*DestData, uint32_t Length, uint32_t AXIAddr);
 
@@ -106,6 +103,7 @@ uint32_t RegisterRead(uint32_t Address);
 // single 32 bit register write, to AXI-Lite bus
 //
 void RegisterWrite(uint32_t Address, uint32_t Data);
+
 //END hwaccess.h
 
 //
@@ -199,6 +197,7 @@ typedef enum
 #define VADDRADCOVERFLOWBASE 0x5000
 #define VADDRFIFOOVERFLOWBASE 0x6000
 #define VADDRFIFORESET 0x7000
+#define VADDRIAMBICCONFIG 0X7004
 #define VADDRFIFOMONBASE 0x9000
 #define VADDRALEXADCBASE 0xA000
 #define VADDRALEXSPIREG 0x0B000
@@ -208,11 +207,6 @@ typedef enum
 #define VADDRCODECSPIREG 0x14000
 #define VADDRXADCREG 0x18000                    // on-chip XADC (temp, VCC...)
 #define VADDRCWKEYERRAM 0x1C000                 // keyer RAM mapped here
-#define VADDRIAMBICCONFIG 0X7004
-
-#define VADDRUSERVERSIONREG 0x4004              // user defined version register
-#define VADDRSWVERSIONREG 0XC000                // user defined s/w version register
-#define VADDRPRODVERSIONREG 0XC004              // user defined product version register
 
 #define VNUMDMAFIFO 4							// DMA streams available
 #define VADDRDDCSTREAMREAD 0x0L					// stream reader/writer on AXI-4 bus
@@ -224,6 +218,14 @@ typedef enum
 #define VBITDUCFIFORESET 3						// reset bit in register
 #define VBITCODECMICFIFORESET 0					// reset bit in register
 #define VBITCODECSPKFIFORESET 1					// reset bit in register
+
+#define VADDRSWVERSIONREG 0XC000                // user defined s/w version register
+#define VADDRUSERVERSIONREG 0x4004
+
+//
+// MOX register
+//
+extern bool MOXAsserted;                                   // true if MOX as asserted
 
 //
 // addresses of the DDC frequency registers
@@ -247,11 +249,12 @@ extern bool GEEREnabled;                                   // P2. true if EER is
 
 
 //
-// InitialiseCWKeyerRamp(void)
+// InitialiseCWKeyerRamp(bool Protocol2, uint32_t Length_us)
 // calculates an "S" shape ramp curve and loads into RAM
 // needs to be called before keyer enabled!
+// parameter is length in microseconds; typically 1000-5000
 //
-void InitialiseCWKeyerRamp(void);
+void InitialiseCWKeyerRamp(bool Protocol2, uint32_t Length_us);
 
 
 
@@ -576,53 +579,6 @@ void SetCWIambicKeyer(uint8_t Speed, uint8_t Weight, bool ReverseKeys, bool Mode
 //
 void SetCWXBits(bool CWXEnabled, bool CWXDash, bool CWXDot);
 
-//
-// SetCWKeyerReversed(bool Reversed)
-// if set, swaps the paddle inputs
-//
-void SetCWKeyerReversed(bool Reversed);
-
-
-//
-// SetCWKeyerSpeed(unsigned int Speed)
-// sets the CW keyer speed, in WPM
-//
-void SetCWKeyerSpeed(unsigned int Speed);
-
-
-//
-// SetCWKeyerMode(unsigned int Mode)
-// sets the CW keyer mode, True if mode B
-//
-void SetCWKeyerMode(unsigned int Mode);
-
-
-//
-// SetCWKeyerWeight(unsigned int Weight)
-// sets the CW keyer weight value (7 bits)
-//
-void SetCWKeyerWeight(unsigned int Weight);
-
-
-//
-// SetCWKeyerSpacing(bool Spacing)
-// sets CW keyer spacing bit
-//
-void SetCWKeyerSpacing(bool Spacing);
-
-
-//
-// SetCWKeyerEnabled(bool Enabled)
-// enables or disables the CW keyer
-//
-void SetCWKeyerEnabled(bool Enabled);
-
-
-//
-// SetCWKeyerBits(bool Enabled, bool Reversed, bool ModeB, bool Strict, bool BreakIn)
-// set several bits associated with the CW iambic keyer
-//
-void SetCWKeyerBits(bool Enabled, bool Reversed, bool ModeB, bool Strict, bool BreakIn);
 
 
 
@@ -661,10 +617,10 @@ void EnableCW (bool Enabled);
 
 
 //
-// SetCWSidetoneVol(unsigned int Volume)
+// SetCWSidetoneVol(uint8_t Volume)
 // sets the sidetone volume level (7 bits, unsigned)
 //
-void SetCWSidetoneVol(unsigned int Volume);
+void SetCWSidetoneVol(uint8_t Volume);
 
 
 //
@@ -695,13 +651,6 @@ void SetCWSidetoneFrequency(unsigned int Frequency);
 // enables or disables sidetone. If disabled, the volume is set to zero
 //
 void SetCWSidetoneEnabled(bool Enabled);
-
-
-//
-// SetCWBreakInEnabled(bool Enabled)
-// enables or disables full CW break-in
-//
-void SetCWBreakInEnabled(bool Enabled);
 
 
 //
@@ -817,13 +766,6 @@ void SetDUCSampleSize(unsigned int Bits);
 // sets a phase shift onto the TX output. Currently unimplemented.
 //
 void SetDUCPhaseShift(unsigned int Value);
-
-
-//
-// SetCWKeys(bool CWXMode, bool Dash, bool Dot)
-// sets the CW key state from SDR application
-//
-void SetCWKeys(bool CWXMode, bool Dash, bool Dot);
 
 
 //

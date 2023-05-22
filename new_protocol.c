@@ -516,10 +516,7 @@ void new_protocol_init(int pixels) {
 
     if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-      start_saturn_receive_thread();
-      start_saturn_micaudio_thread();
-      start_saturn_high_priority_thread();
-      start_saturn_server();
+      saturn_init();
       iqindex=4;
       audioindex=4; // leave space for sequence
       audiosequence=0L;

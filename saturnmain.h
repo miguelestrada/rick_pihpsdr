@@ -21,9 +21,7 @@
 #include "saturnregisters.h"
 
 void saturn_discovery();
-void start_saturn_receive_thread();
-void start_saturn_micaudio_thread();
-void start_saturn_high_priority_thread();
+void saturn_init();
 void saturn_handle_speaker_audio(uint8_t *UDPInBuffer);
 void saturn_handle_high_priority(unsigned char *high_priority_buffer_to_radio);
 void saturn_handle_general_packet(uint8_t *PacketBuffer);
@@ -31,7 +29,6 @@ void saturn_handle_ddc_specific(unsigned char *receive_specific_buffer);
 void saturn_handle_duc_specific(unsigned char *transmit_specific_buffer);
 void saturn_handle_duc_iq(uint8_t *UDPInBuffer);
 void saturn_handle_high_priority(uint8_t *UDPInBuffer);
-void start_saturn_server();
 void saturn_exit();
 
 #endif

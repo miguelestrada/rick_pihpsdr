@@ -212,6 +212,60 @@ void FreeDynamicMemory(void)
     }
 }
 
+void saturn_discovery()
+{
+    if(devices<MAX_DEVICES)
+    {
+
+        struct stat sb;
+        int status = 1;
+        int i;
+        char buf[256];
+        FILE *fp;
+        uint8_t *mac = discovered[devices].info.network.mac_address;
+
+        if (stat("/dev/xdma/card0", &sb) == 0 && S_ISDIR(sb.st_mode))
+        {
+            discovered[devices].protocol = NEW_PROTOCOL;
+            discovered[devices].device = NEW_DEVICE_SATURN;
+            discovered[devices].software_version = (RegisterRead(VADDRSWVERSIONREG) >> 4) & 0xFFFF;
+            discovered[devices].fpga_version = RegisterRead(VADDRUSERVERSIONREG);
+            strcpy(discovered[devices].name,"saturn");
+            discovered[devices].frequency_min=0.0;
+            discovered[devices].frequency_max=61440000.0;
+            memset(buf, 0, 256);
+            fp = fopen("/sys/class/net/eth0/address", "rt");
+            if (fp)
+            {
+                if (fgets(buf, sizeof buf, fp) > 0)
+                {
+                    sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0],
+                           &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+                    status = 0;
+                }
+                fclose(fp);
+            }
+            else
+            for(i=0; i<6; i++)
+            {
+                discovered[devices].info.network.mac_address[i]=0;
+            }
+            discovered[devices].status = STATE_AVAILABLE;
+            discovered[devices].info.network.address_length=0;
+            discovered[devices].info.network.interface_length=0;
+            strcpy(discovered[devices].info.network.interface_name,"XDMA");
+            discovered[devices].use_tcp=0;
+            discovered[devices].use_routing=0;
+            discovered[devices].supported_receivers=2;
+            fprintf(stderr,"discovery: found saturn device min=%f max=%f\n",
+            discovered[devices].frequency_min,
+            discovered[devices].frequency_max);
+
+            devices++;
+        }
+    }
+}
+
 #define VDUCIQSAMPLESPERFRAME 240                      // samples per UDP frame
 #define VMEMDUCWORDSPERFRAME 180                       // memory writes per UDP frame
 #define VBYTESPERSAMPLE 6                                                       // 24 bit + 24 bit samples
@@ -283,21 +337,6 @@ void saturn_handle_duc_iq(uint8_t *UDPInBuffer)
     }
     // copy data from UDP Buffer & DMA write it
     memcpy(DUCIQBasePtr, UDPInBuffer + 4, VDMADUCTRANSFERSIZE);                // copy out I/Q samples
-#if 0 // no swapping when not coming in from network
-    // need to swap I & Q samples on replay
-    SrcPtr = (UDPInBuffer + 4);
-    DestPtr = DUCIQBasePtr;
-    for (Cntr=0; Cntr < VIQSAMPLESPERFRAME; Cntr++)                     // samplecounter
-    {
-        *DestPtr++ = *(SrcPtr+3);                           // get I sample (3 bytes)
-        *DestPtr++ = *(SrcPtr+4);
-        *DestPtr++ = *(SrcPtr+5);
-        *DestPtr++ = *(SrcPtr+0);                           // get Q sample (3 bytes)
-        *DestPtr++ = *(SrcPtr+1);
-        *DestPtr++ = *(SrcPtr+2);
-        SrcPtr += 6;                                        // point at next source sample
-    }
-#endif
     DMAWriteToFPGA(DMADUCWritefile_fd, DUCIQBasePtr, VDMADUCTRANSFERSIZE, VADDRDUCSTREAMWRITE);
     return;
 }
@@ -414,69 +453,6 @@ void saturn_exit()
     sem_destroy(&CodecRegMutex);
     SetMOX(false);
     SetTXEnable(false);
-}
-
-void saturn_discovery()
-{
-    if(devices<MAX_DEVICES)
-    {
-
-        struct stat sb;
-        int status = 1;
-        int i;
-        char buf[256];
-        FILE *fp;
-        uint8_t *mac = discovered[devices].info.network.mac_address;
-
-        for(i=0; i<MAXMYBUF; i++)
-        {
-            num_buf[i] = 0;
-            buflist[i] = NULL;
-        }
-
-        if (stat("/dev/xdma/card0", &sb) == 0 && S_ISDIR(sb.st_mode))
-        {
-            saturn_init_ddc_iq();
-            saturn_init_speaker_audio();
-            saturn_init_duc_iq();
-            discovered[devices].protocol = NEW_PROTOCOL;
-            discovered[devices].device = NEW_DEVICE_SATURN;
-            discovered[devices].software_version = (RegisterRead(VADDRSWVERSIONREG) >> 4) & 0xFFFF;
-            discovered[devices].fpga_version = RegisterRead(VADDRUSERVERSIONREG);
-            strcpy(discovered[devices].name,"saturn");
-            discovered[devices].frequency_min=0.0;
-            discovered[devices].frequency_max=61440000.0;
-            memset(buf, 0, 256);
-            fp = fopen("/sys/class/net/eth0/address", "rt");
-            if (fp)
-            {
-                if (fgets(buf, sizeof buf, fp) > 0)
-                {
-                    sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0],
-                           &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-                    status = 0;
-                }
-                fclose(fp);
-            }
-            else
-            for(i=0; i<6; i++)
-            {
-                discovered[devices].info.network.mac_address[i]=0;
-            }
-            discovered[devices].status = STATE_AVAILABLE;
-            discovered[devices].info.network.address_length=0;
-            discovered[devices].info.network.interface_length=0;
-            strcpy(discovered[devices].info.network.interface_name,"XDMA");
-            discovered[devices].use_tcp=0;
-            discovered[devices].use_routing=0;
-            discovered[devices].supported_receivers=2;
-            fprintf(stderr,"discovery: found saturn device min=%f max=%f\n",
-            discovered[devices].frequency_min,
-            discovered[devices].frequency_max);
-
-            devices++;
-        }
-    }
 }
 
 #define VHIGHPRIOTIYFROMSDRSIZE 60
@@ -970,6 +946,17 @@ static gpointer saturn_rx_thread(gpointer arg)
     }
     printf("ending: %s\n", __FUNCTION__);
     return NULL;
+}
+
+void saturn_init()
+{
+    saturn_init_ddc_iq();
+    saturn_init_speaker_audio();
+    saturn_init_duc_iq();
+    start_saturn_receive_thread();
+    start_saturn_micaudio_thread();
+    start_saturn_high_priority_thread();
+    start_saturn_server();
 }
 
 void saturn_handle_high_priority(unsigned char *UDPInBuffer)

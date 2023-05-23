@@ -538,7 +538,7 @@ static gpointer saturn_high_priority_thread(gpointer arg)
         //
         while(SDRActive)                               // main loop
         {
-            if(1)//TXActive != 2)
+            if(TXActive != 2)
             {
               // do the bytes first
               mybuffer *mybuf = get_my_buffer(HPMYBUF);
@@ -569,7 +569,7 @@ static gpointer saturn_high_priority_thread(gpointer arg)
 
             if (ServerActive)
             {
-              if(1)//TXActive != 1)
+              if(TXActive != 1)
               {
                 *(uint32_t *)UDPBuffer = htonl(SequenceCounter2++);        // add sequence count
                 ReadStatusRegister();
@@ -734,7 +734,10 @@ static gpointer saturn_micaudio_thread(gpointer arg)
             // create the packet
             mybuffer *mybuf = get_my_buffer(MICMYBUF);
             *(uint32_t*)mybuf->buffer = bswap_32(SequenceCounter++);        // add sequence count
-            memcpy(mybuf->buffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
+            if(TXActive == 2)
+              memset(mybuf->buffer+4, 0, VDMAMICTRANSFERSIZE);       // copy in mic samples
+            else
+              memcpy(mybuf->buffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
             saturn_post_micaudio(VMICPACKETSIZE, mybuf);
 
 	    if(ServerActive)
@@ -744,7 +747,10 @@ static gpointer saturn_micaudio_thread(gpointer arg)
 
               // create the packet into UDPBuffer
               *(uint32_t*)UDPBuffer = htonl(SequenceCounter2++);        // add sequence count
-              memcpy(UDPBuffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
+              if(TXActive == 1)
+                memset(UDPBuffer+4, 0, VDMAMICTRANSFERSIZE);       // copy in mic samples
+              else
+                memcpy(UDPBuffer+4, MicBasePtr, VDMAMICTRANSFERSIZE);       // copy in mic samples
               Error = sendmsg(SocketData[VPORTMICAUDIO].Socketid, &datagram, 0); 
               if(Error == -1) 
               {

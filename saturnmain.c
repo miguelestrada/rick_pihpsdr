@@ -538,67 +538,73 @@ static gpointer saturn_high_priority_thread(gpointer arg)
         //
         while(SDRActive)                               // main loop
         {
-            // do the bytes first
-            mybuffer *mybuf = get_my_buffer(HPMYBUF);
-            *(uint32_t *)mybuf->buffer = bswap_32(SequenceCounter++);        // add sequence count
-            ReadStatusRegister();
-            Byte = (uint8_t)GetP2PTTKeyInputs();
-            *(uint8_t *)(mybuf->buffer+4) = Byte;
-            Byte = (uint8_t)GetADCOverflow();
-            *(uint8_t *)(mybuf->buffer+5) = Byte;
-            Byte = (uint8_t)GetUserIOBits();                  // user I/O bits
-            *(uint8_t *)(mybuf->buffer+59) = Byte;
-            Word = (uint16_t)GetAnalogueIn(4);
-            *(uint16_t *)(mybuf->buffer+6) = bswap_16(Word);                // exciter power
-            Word = (uint16_t)GetAnalogueIn(0);
-            *(uint16_t *)(mybuf->buffer+14) = bswap_16(Word);               // forward power
-            Word = (uint16_t)GetAnalogueIn(1);
-            *(uint16_t *)(mybuf->buffer+22) = bswap_16(Word);               // reverse power
-            Word = (uint16_t)GetAnalogueIn(5);
-            *(uint16_t *)(mybuf->buffer+49) = bswap_16(Word);               // supply voltage
+            if(1)//TXActive != 2)
+            {
+              // do the bytes first
+              mybuffer *mybuf = get_my_buffer(HPMYBUF);
+              *(uint32_t *)mybuf->buffer = bswap_32(SequenceCounter++);        // add sequence count
+              ReadStatusRegister();
+              Byte = (uint8_t)GetP2PTTKeyInputs();
+              *(uint8_t *)(mybuf->buffer+4) = Byte;
+              Byte = (uint8_t)GetADCOverflow();
+              *(uint8_t *)(mybuf->buffer+5) = Byte;
+              Byte = (uint8_t)GetUserIOBits();                  // user I/O bits
+              *(uint8_t *)(mybuf->buffer+59) = Byte;
+              Word = (uint16_t)GetAnalogueIn(4);
+              *(uint16_t *)(mybuf->buffer+6) = bswap_16(Word);                // exciter power
+              Word = (uint16_t)GetAnalogueIn(0);
+              *(uint16_t *)(mybuf->buffer+14) = bswap_16(Word);               // forward power
+              Word = (uint16_t)GetAnalogueIn(1);
+              *(uint16_t *)(mybuf->buffer+22) = bswap_16(Word);               // reverse power
+              Word = (uint16_t)GetAnalogueIn(5);
+              *(uint16_t *)(mybuf->buffer+49) = bswap_16(Word);               // supply voltage
 
-            Word = (uint16_t)GetAnalogueIn(2);
-            *(uint16_t *)(mybuf->buffer+53) = bswap_16(Word);               // AIN3
-            Word = (uint16_t)GetAnalogueIn(3);
-            *(uint16_t *)(mybuf->buffer+51) = bswap_16(Word);               // AIN4
+              Word = (uint16_t)GetAnalogueIn(2);
+              *(uint16_t *)(mybuf->buffer+53) = bswap_16(Word);               // AIN3
+              Word = (uint16_t)GetAnalogueIn(3);
+              *(uint16_t *)(mybuf->buffer+51) = bswap_16(Word);               // AIN4
 
-            saturn_post_high_priority(mybuf);
+              saturn_post_high_priority(mybuf);
+            }
 
             if (ServerActive)
             {
-              *(uint32_t *)UDPBuffer = htonl(SequenceCounter2++);        // add sequence count
-              ReadStatusRegister();
-              Byte = (uint8_t)GetP2PTTKeyInputs();
-              *(uint8_t *)(UDPBuffer+4) = Byte;
-              Byte = (uint8_t)GetADCOverflow();
-              *(uint8_t *)(UDPBuffer+5) = Byte;
-              Word = (uint16_t)GetAnalogueIn(4);
-              *(uint16_t *)(UDPBuffer+6) = htons(Word);                // exciter power
-              Word = (uint16_t)GetAnalogueIn(0);
-              *(uint16_t *)(UDPBuffer+14) = htons(Word);               // forward power
-              Word = (uint16_t)GetAnalogueIn(1);
-              *(uint16_t *)(UDPBuffer+22) = htons(Word);               // reverse power
-              Word = (uint16_t)GetAnalogueIn(5);
-              *(uint16_t *)(UDPBuffer+49) = htons(Word);               // supply voltage
-
-              Word = (uint16_t)GetAnalogueIn(2);
-              *(uint16_t *)(UDPBuffer+53) = htons(Word);               // AIN3
-              Word = (uint16_t)GetAnalogueIn(3);
-              *(uint16_t *)(UDPBuffer+51) = htons(Word);               // AIN4
-
-              Byte = (uint8_t)GetUserIOBits();                  // user I/O bits
-              *(uint8_t *)(UDPBuffer+59) = Byte;
-
-              iovecinst.iov_base = UDPBuffer;
-              memcpy(&DestAddr, &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
-              Error = sendmsg(SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid, &datagram, 0);
-
-              if (Error == -1)
+              if(1)//TXActive != 1)
               {
-                  printf("Send Error, errno=%d, socket id = %d\n",
-                    errno, SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid);
-                  exit( -1 );
-              }
+                *(uint32_t *)UDPBuffer = htonl(SequenceCounter2++);        // add sequence count
+                ReadStatusRegister();
+                Byte = (uint8_t)GetP2PTTKeyInputs();
+                *(uint8_t *)(UDPBuffer+4) = Byte;
+                Byte = (uint8_t)GetADCOverflow();
+                *(uint8_t *)(UDPBuffer+5) = Byte;
+                Word = (uint16_t)GetAnalogueIn(4);
+                *(uint16_t *)(UDPBuffer+6) = htons(Word);                // exciter power
+                Word = (uint16_t)GetAnalogueIn(0);
+                *(uint16_t *)(UDPBuffer+14) = htons(Word);               // forward power
+                Word = (uint16_t)GetAnalogueIn(1);
+                *(uint16_t *)(UDPBuffer+22) = htons(Word);               // reverse power
+                Word = (uint16_t)GetAnalogueIn(5);
+                *(uint16_t *)(UDPBuffer+49) = htons(Word);               // supply voltage
+
+                Word = (uint16_t)GetAnalogueIn(2);
+                *(uint16_t *)(UDPBuffer+53) = htons(Word);               // AIN3
+                Word = (uint16_t)GetAnalogueIn(3);
+                *(uint16_t *)(UDPBuffer+51) = htons(Word);               // AIN4
+
+                Byte = (uint8_t)GetUserIOBits();                  // user I/O bits
+                *(uint8_t *)(UDPBuffer+59) = Byte;
+
+                iovecinst.iov_base = UDPBuffer;
+                memcpy(&DestAddr, &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
+                Error = sendmsg(SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid, &datagram, 0);
+
+                if (Error == -1)
+                {
+                    printf("Send Error, errno=%d, socket id = %d\n",
+                      errno, SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid);
+                    exit( -1 );
+                }
+	      }
             }
             else
               SequenceCounter2 = 0;

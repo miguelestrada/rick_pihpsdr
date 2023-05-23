@@ -1108,6 +1108,8 @@ void saturn_handle_high_priority(bool FromNetwork, unsigned char *UDPInBuffer)
     RunBit = (bool)(Byte&1);
     IsTXMode = (bool)(Byte&2);
 
+    //if(!IsTXMode) TXActive = 0;
+
     if(FromNetwork)
     {
 
@@ -1136,8 +1138,6 @@ void saturn_handle_high_priority(bool FromNetwork, unsigned char *UDPInBuffer)
 
       TXActive = (IsTXMode)?1:0;
     }
-
-    if(!IsTXMode) TXActive = 0; // I don't think this is necessary, but just in case
 
     SetMOX(IsTXMode);
     //
@@ -1292,7 +1292,7 @@ void saturn_handle_ddc_specific(bool FromNetwork, unsigned char *UDPInBuffer)
         // check: if DDC5 synch to DDC4, enable it;
         // check: if DDC7 synch to DDC6, enable it;
         // (reuse the Dither variable)
-        switch(i+DDCOffset)
+        switch(i)
         {
         case 0:
             Byte1 = *(uint8_t*)(UDPInBuffer + 1363);          // get DDC0 synch

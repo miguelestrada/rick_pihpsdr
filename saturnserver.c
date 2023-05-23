@@ -53,10 +53,6 @@ bool SkipExitCheck = false;                 // true to skip "exit checking", if 
 bool ThreadError = false;                   // true if a thread reports an error
 bool ServerActive = false;
 
-sem_t NetDDCRegMutex[5];
-
-#define SDRBOARDID 1                        // Hermes
-#define SDRSWVERSION 1                      // version of this software
 #define VDISCOVERYSIZE 60                   // discovery packet
 #define VDISCOVERYREPLYSIZE 60              // reply packet
 #define VWIDEBANDSIZE 1028                  // wideband scalar samples
@@ -109,28 +105,6 @@ pthread_t DDCIQThread[VNUMDDC];               // array, but not sure how many
 pthread_t MicThread;
 pthread_t HighPriorityFromSDRThread;
 pthread_t CheckForNoActivityThread;           // thread looks for inactvity
-
-//
-// function to check if any threads are still active
-// loop through the table; report if any are true.
-// parameter is to allow the "command" socket to stay open
-//
-bool CheckActiveThreads(int StartingPoint)
-{
-  struct ThreadSocketData* Ptr = SocketData+StartingPoint;
-  bool Result = false;
-
-  for (int i = StartingPoint; i < VPORTTABLESIZE; i++)          // loop through the socket table
-  {
-    if(Ptr->Active)                                 // check this thread
-      Result = true;
-    Ptr++;
-  }
-    if(Result)
-      printf("found an active thread\n");
-    return Result;
-}
-
 
 
 //
@@ -335,6 +309,7 @@ void* saturn_server(void *arg)
     return NULL;
   }
   pthread_detach(HighPriorityToSDRThread);
+
 #if 0
   MakeSocket(SocketData+VPORTSPKRAUDIO, 0);            // create and bind a socket
   if(pthread_create(&SpkrAudioThread, NULL, IncomingSpkrAudio, (void*)&SocketData[VPORTSPKRAUDIO]) < 0)
@@ -343,6 +318,7 @@ void* saturn_server(void *arg)
     return NULL;
   }
   pthread_detach(SpkrAudioThread);
+#endif
 
   MakeSocket(SocketData+VPORTDUCIQ, 0);            // create and bind a socket
   if(pthread_create(&DUCIQThread, NULL, IncomingDUCIQ, (void*)&SocketData[VPORTDUCIQ]) < 0)
@@ -351,15 +327,14 @@ void* saturn_server(void *arg)
     return NULL;
   }
   pthread_detach(DUCIQThread);
-#endif
 
 //
 // create outgoing mic data thread
 // note this shares a port with incoming DUC specific, so don't create a new port
 // instead copy socket settings from DUCSPECIFIC socket:
 //
-#if 0
   SocketData[VPORTMICAUDIO].Socketid = SocketData[VPORTDUCSPECIFIC].Socketid;
+#if 0
   memcpy(&SocketData[VPORTMICAUDIO].addr_cmddata, &SocketData[VPORTDUCSPECIFIC].addr_cmddata, sizeof(struct sockaddr_in));
   if(pthread_create(&MicThread, NULL, OutgoingMicSamples, (void*)&SocketData[VPORTMICAUDIO]) < 0)
   {
@@ -374,8 +349,8 @@ void* saturn_server(void *arg)
 // note this shares a port with incoming DDC specific, so don't create a new port
 // instead copy socket settings from VPORTDDCSPECIFIC socket:
 //
-#if 0
   SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid = SocketData[VPORTDDCSPECIFIC].Socketid;
+#if 0
   memcpy(&SocketData[VPORTHIGHPRIORITYFROMSDR].addr_cmddata, &SocketData[VPORTDDCSPECIFIC].addr_cmddata, sizeof(struct sockaddr_in));
   if(pthread_create(&HighPriorityFromSDRThread, NULL, OutgoingHighPriority, (void*)&SocketData[VPORTHIGHPRIORITYFROMSDR]) < 0)
   {
@@ -387,8 +362,7 @@ void* saturn_server(void *arg)
 
 
 //
-// and for now create just one outgoing DDC data thread for DDC 0
-// create all the sockets though!
+// create all the DDC sockets
 //
   MakeSocket(SocketData + VPORTDDCIQ0, 0);
   MakeSocket(SocketData + VPORTDDCIQ1, 1);
@@ -451,8 +425,7 @@ void* saturn_server(void *arg)
           reply_addr.sin_family = AF_INET;
           reply_addr.sin_addr.s_addr = addr_from.sin_addr.s_addr;
           reply_addr.sin_port = addr_from.sin_port;                       // (but each outgoing thread needs to set its own sin_port)
-          //RRK, not network client
-          //saturn_handle_general_packet(UDPInBuffer);
+          saturn_handle_general_packet(true, UDPInBuffer);
           ReplyAddressSet = true;
           if(ReplyAddressSet && StartBitReceived)
             ServerActive = true;                                       // only set active if we have start bit too
@@ -511,12 +484,6 @@ void *IncomingHighPriority(void *arg)                   // listener thread
   struct iovec iovecinst;                               // iovcnt buffer - 1 for each outgoing buffer
   struct msghdr datagram;                               // multiple incoming message header
   int size;                                             // UDP datagram length
-  bool RunBit;                                          // true if "run" bit set
-  uint32_t DDCPhaseIncrement;                           // delta phase for a DDC
-  uint8_t Byte, Byte2;                                  // received dat being decoded
-  uint32_t LongWord;
-  uint16_t Word;
-  int i;                                                // counter
 
   ThreadData = (struct ThreadSocketData *)arg;
   ThreadData->Active = true;
@@ -549,72 +516,7 @@ void *IncomingHighPriority(void *arg)                   // listener thread
     if(size == VHIGHPRIOTIYTOSDRSIZE)
     {
       NewMessageReceived = true;
-      printf("high priority packet received\n");
-      Byte = (uint8_t)(UDPInBuffer[4]);
-      RunBit = (bool)(Byte&1);
-      if(RunBit)
-      {
-        StartBitReceived = true;
-        if(ReplyAddressSet && StartBitReceived)
-          ServerActive = true;                                       // only set active if we have replay address too
-      }
-      else
-      {
-        ServerActive = false;                                       // set state of whole app
-        printf("set to inactive by client app\n");
-        StartBitReceived = false;
-      }
-//
-// now properly decode network client DDC frequencies
-//
-      for (i=0; i<6; i++)
-      {
-        LongWord = ntohl(*(uint32_t *)(UDPInBuffer+i*4+9));
-        SetDDCFrequency(i+4, LongWord, true);                   // temporarily set above
-      }
-#if 0 //RRK, not network client
-      IsTXMode = (bool)(Byte&2);
-      SetMOX(IsTXMode);
-
-      //
-      // DUC frequency & drive level
-      //
-      LongWord = ntohl(*(uint32_t *)(UDPInBuffer+329));
-      SetDUCFrequency(LongWord, true);
-      Byte = (uint8_t)(UDPInBuffer[345]);
-      SetTXDriveLevel(Byte);
-      //
-      // transverter, speaker mute, open collector, user outputs
-      //
-      Byte = (uint8_t)(UDPInBuffer[1400]);
-      SetXvtrEnable((bool)(Byte&1));
-//      SetSpkrMute((bool)((Byte>>1)&1));
-      Byte = (uint8_t)(UDPInBuffer[1401]);
-      SetOpenCollectorOutputs(Byte);
-      Byte = (uint8_t)(UDPInBuffer[1402]);
-      SetUserOutputBits(Byte);
-      //
-      // Alex
-      //
-      Word = ntohs(*(uint16_t *)(UDPInBuffer+1430));
-      AlexManualRXFilters(Word, 2);
-      Word = ntohs(*(uint16_t *)(UDPInBuffer+1432));
-      AlexManualTXFilters(Word);
-      Word = ntohs(*(uint16_t *)(UDPInBuffer+1434));
-      AlexManualRXFilters(Word, 0);
-      //
-      // RX atten during TX and RX
-      //
-      Byte2 = (uint8_t)(UDPInBuffer[1442]);     // RX2 atten
-      Byte = (uint8_t)(UDPInBuffer[1443]);      // RX1 atten
-      SetADCAttenuator(eADC1, Byte, true, true);
-      SetADCAttenuator(eADC2, Byte2, true, true);
-      //
-      // CWX bits
-      //
-      Byte = (uint8_t)(UDPInBuffer[5]);      // CWX
-      SetCWXBits((bool)(Byte & 1), (bool)((Byte>>2) & 1), (bool)((Byte>>1) & 1));    // enabled, dash, dot
-#endif
+      saturn_handle_high_priority(true, UDPInBuffer);
     }
   }
 //
@@ -638,12 +540,6 @@ void *IncomingDDCSpecific(void *arg)                    // listener thread
   struct iovec iovecinst;                               // iovcnt buffer - 1 for each outgoing buffer
   struct msghdr datagram;                               // multiple incoming message header
   int size;                                             // UDP datagram length
-  uint8_t Byte1, Byte2;                                 // received data
-  bool Dither, Random;                                  // ADC bits
-  bool Enabled, Interleaved;                            // DDC settings
-  uint16_t Word, Word2;                                 // 16 bit read value
-  int i;                                                // counter
-  EADCSelect ADC = eADC1;                               // ADC to use for a DDC
 
   ThreadData = (struct ThreadSocketData *)arg;
   ThreadData->Active = true;
@@ -670,114 +566,7 @@ void *IncomingDDCSpecific(void *arg)                    // listener thread
     if(size == VDDCSPECIFICSIZE)
     {
       NewMessageReceived = true;
-      printf("DDC specific packet received\n");
-#if 0
-      // get ADC details:
-      Byte1 = *(uint8_t*)(UDPInBuffer+4);                   // get ADC count
-      SetADCCount(Byte1);
-      Byte1 = *(uint8_t*)(UDPInBuffer+5);                   // get ADC Dither bits
-      Byte2 = *(uint8_t*)(UDPInBuffer+6);                   // get ADC Random bits
-      Dither  = (bool)(Byte1&1);
-      Random  = (bool)(Byte2&1);
-      SetADCOptions(eADC1, false, Dither, Random);          // ADC1 settings
-      Byte1 = Byte1 >> 1;                                   // move onto ADC bits
-      Byte2 = Byte2 >> 1;
-      Dither  = (bool)(Byte1&1);
-      Random  = (bool)(Byte2&1);
-      SetADCOptions(eADC2, false, Dither, Random);          // ADC2 settings
-#endif  
-      //
-      // main settings for each DDC
-      // reuse "dither" for interleaved with next;
-      // reuse "random" for DDC enabled.
-      // be aware an interleaved "odd" DDC will usually be set to disabled, and we need to revert this!
-      //
-      Word = *(uint16_t*)(UDPInBuffer + 7);                 // get DDC enables 15:0 (note it is already low byte 1st!)
-      for(i=0; i<6; i++)
-      {
-        Enabled = (bool)(Word & 1);                        // get enable state
-        Byte1 = *(uint8_t*)(UDPInBuffer+i*6+17);          // get ADC for this DDC
-        Word2 = *(uint16_t*)(UDPInBuffer+i*6+18);         // get sample rate for this DDC
-        Word2 = ntohs(Word2);                             // swap byte order
-        Byte2 = *(uint8_t*)(UDPInBuffer+i*6+22);          // get sample size for this DDC
-        SetDDCSampleSize(i+4, Byte2);
-        if(Byte1 == 0)
-          ADC = eADC1;
-        else if(Byte1 == 1)
-          ADC = eADC2;
-        else if(Byte1 == 2)
-          ADC = eTXSamples;
-        SetDDCADC(i+4, ADC);
-
-        Interleaved = false;                                 // assume no synch
-        // finally DDC synchronisation: my implementation it seems isn't what the spec intended!
-        // check: is DDC1 programmed to sync with DDC0;
-        // check: is DDC3 programmed to sync with DDC2;
-        // check: is DDC5 programmed to sync with DDC4;
-        // check: is DDC7 programmed to sync with DDC6;
-        // check: if DDC1 synch to DDC0, enable it;
-        // check: if DDC3 synch to DDC2, enable it;
-        // check: if DDC5 synch to DDC4, enable it;
-        // check: if DDC7 synch to DDC6, enable it;
-        // (reuse the Dither variable)
-        switch(i)
-        {
-            case 0:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1363);          // get DDC0 synch
-                if (Byte1 == 0b00000010)
-                    Interleaved = true;                                // set interleave
-                break;
-
-            case 1: 
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1363);          // get DDC0 synch
-                if (Byte1 == 0b00000010)                          // if synch to DDC1
-                    Enabled = true;                                // enable DDC1
-                break;
-
-            case 2:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1365);          // get DDC2 synch
-                if (Byte1 == 0b00001000)
-                    Interleaved = true;                                // set interleave
-                break;
-
-            case 3:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1365);          // get DDC2 synch
-                if (Byte1 == 0b00001000)                          // if synch to DDC3
-                    Enabled = true;                                // enable DDC3
-                break;
-
-            case 4:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1367);          // get DDC4 synch
-                if (Byte1 == 0b00100000)
-                    Interleaved = true;                                // set interleave
-                break;
-        
-            case 5:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1367);          // get DDC4 synch
-                if (Byte1 == 0b00100000)                          // if synch to DDC5
-                    Enabled = true;                                // enable DDC5
-                break;
-
-            case 6:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1369);          // get DDC6 synch
-                if (Byte1 == 0b10000000)
-                    Interleaved = true;                                // set interleave
-                break;
-
-            case 7:
-                Byte1 = *(uint8_t*)(UDPInBuffer + 1369);          // get DDC6 synch
-                if (Byte1 == 0b10000000)                          // if synch to DDC7
-                    Enabled = true;                                // enable DDC7
-                break;
-
-        }
-        SetP2SampleRate(i+4, Enabled, Word2, Interleaved);
-        Word = Word >> 1;                                 // move onto next DDC enabled bit
-      }
-      // now set register, and see if any changes made; reuse Dither again
-      Dither = WriteP2DDCRateRegister();
-      //if (Dither)
-      //  HandlerCheckDDCSettings();
+      saturn_handle_ddc_specific(true, UDPInBuffer);
     }
   }
 //
@@ -801,13 +590,6 @@ void *IncomingDUCSpecific(void *arg)                    // listener thread
     struct iovec iovecinst;                               // iovcnt buffer - 1 for each outgoing buffer
     struct msghdr datagram;                               // multiple incoming message header
     int size;                                             // UDP datagram length
-    uint8_t Byte;
-    uint16_t SidetoneFreq;                                // freq for audio sidetone
-    uint8_t IambicSpeed;                                  // WPM
-    uint8_t IambicWeight;                                 //
-    uint8_t SidetoneVolume;
-    uint8_t CWRFDelay;
-    uint16_t CWHangDelay;
 
     ThreadData = (struct ThreadSocketData *)arg;
     ThreadData->Active = true;
@@ -834,34 +616,7 @@ void *IncomingDUCSpecific(void *arg)                    // listener thread
       if(size == VDUCSPECIFICSIZE)
       {
           NewMessageReceived = true;
-          printf("DUC specific packet received\n");
-          continue; //RRK, not network client
-// iambic settings
-          IambicSpeed = *(uint8_t*)(UDPInBuffer+9);               // keyer speed
-          IambicWeight = *(uint8_t*)(UDPInBuffer+10);             // keyer weight
-          Byte = *(uint8_t*)(UDPInBuffer+5);                      // keyer bool bits
-          SetCWIambicKeyer(IambicSpeed, IambicWeight, (bool)((Byte >> 2)&1), (bool)((Byte >> 5)&1), 
-                          (bool)((Byte >> 6)&1), (bool)((Byte >> 3)&1), (bool)((Byte >> 7)&1));
-// general CW settings
-          SetCWSidetoneEnabled((bool)((Byte >> 4)&1));
-          EnableCW((bool)((Byte >> 1)&1));                        // CW enabled bit
-          SidetoneVolume = *(uint8_t*)(UDPInBuffer+6);            // keyer speed
-          SidetoneFreq = *(uint16_t*)(UDPInBuffer+7);             // get frequency
-          SidetoneFreq = ntohs(SidetoneFreq);                     // convert from big endian
-          SetCWSidetoneVol(SidetoneVolume);
-          SetCWSidetoneFrequency(SidetoneFreq);
-          CWRFDelay = *(uint8_t*)(UDPInBuffer+13);                // delay before CW on
-          CWHangDelay = *(uint16_t*)(UDPInBuffer+11);             // delay before CW off
-          CWHangDelay = ntohs(CWHangDelay);                       // convert from big endian
-          SetCWPTTDelay(CWRFDelay);
-          SetCWHangTime(CWHangDelay);
-// mic and line in options
-          Byte = *(uint8_t*)(UDPInBuffer+50);                     // mic/line options
-          SetMicBoost((bool)((Byte >> 1)&1));
-          SetMicLineInput((bool)(Byte&1));
-          SetOrionMicOptions((bool)((Byte >> 3)&1), (bool)((Byte >> 4)&1), (bool)((~Byte >> 2)&1));          
-          Byte = *(uint8_t*)(UDPInBuffer+51);                     // line in gain
-          SetCodecLineInGain(Byte);
+          saturn_handle_duc_specific(true, UDPInBuffer);
       }
     }
 //
@@ -971,7 +726,7 @@ void *IncomingSpkrAudio(void *arg)                      // listener thread
                 usleep(1000);								                    // 1ms wait
                 Depth = ReadFIFOMonitorChannel(eSpkCodecDMA, &FIFOOverflow);    // read the FIFO free locations
             }
-            // copy sata from UDP Buffer & DMA write it
+            // copy data from UDP Buffer & DMA write it
             memcpy(SpkBasePtr, UDPInBuffer + 4, VDMATRANSFERSIZE);              // copy out spk samples
 //            if(RegVal == 100)
 //                DumpMemoryBuffer(SpkBasePtr, VDMATRANSFERSIZE);
@@ -991,9 +746,6 @@ void *IncomingSpkrAudio(void *arg)                      // listener thread
 #define VIQSAMPLESPERFRAME 240                      // samples per UDP frame
 #define VMEMDUCWORDSPERFRAME 180                       // memory writes per UDP frame
 #define VBYTESPERSAMPLE 6							// 24 bit + 24 bit samples
-#define VDMABUFFERSIZE 32768						// memory buffer to reserve
-#define VALIGNMENT 4096                             // buffer alignment
-#define VBASE 0x1000								// DMA start at 4K into buffer
 #define VDMADUCTRANSFERSIZE 1440                       // write 1 message at a time
 
 //
@@ -1011,59 +763,10 @@ void *IncomingDUCIQ(void *arg)                          // listener thread
     struct msghdr datagram;                               // multiple incoming message header
     int size;                                             // UDP datagram length
 
-                                                          //
-// variables for DMA buffer 
-//
-    uint8_t* IQWriteBuffer = NULL;							// data for DMA to write to DUC
-    uint32_t IQBufferSize = VDMABUFFERSIZE;
-    bool InitError = false;                                 // becomes true if we get an initialisation error
-    unsigned char* IQReadPtr;								// pointer for reading out an I/Q sample
-    unsigned char* IQHeadPtr;								// ptr to 1st free location in I/Q memory
-    unsigned char* IQBasePtr;								// ptr to DMA location in I/Q memory
-    uint32_t Depth = 0;
-    int DMAWritefile_fd = -1;								// DMA read file device
-    bool FIFOOverflow;
-    uint32_t Cntr;                                          // sample counter
-    uint8_t* SrcPtr;                                        // pointer to data from Thetis
-    uint8_t* DestPtr;                                       // pointer to DMA buffer data
-
     ThreadData = (struct ThreadSocketData *)arg;
     ThreadData->Active = true;
-    printf("spinning up DUC I/Q thread with port %d\n", ThreadData->Portid);
-  
-    //
-    // setup DMA buffer
-    //
-    posix_memalign((void**)&IQWriteBuffer, VALIGNMENT, IQBufferSize);
-    if (!IQWriteBuffer)
-    {
-        printf("I/Q TX write buffer allocation failed\n");
-        InitError = true;
-    }
-    IQReadPtr = IQWriteBuffer + VBASE;							// offset 4096 bytes into buffer
-    IQHeadPtr = IQWriteBuffer + VBASE;
-    IQBasePtr = IQWriteBuffer + VBASE;
-    memset(IQWriteBuffer, 0, IQBufferSize);
-
-    //
-    // open DMA device driver
-    //
-    DMAWritefile_fd = open(VDUCDMADEVICE, O_RDWR);
-    if (DMAWritefile_fd < 0)
-    {
-        printf("XDMA write device open failed for TX I/Q data\n");
-        InitError = true;
-    }
-        
-//
-// setup hardware
-//
-    EnableDUCMux(false);                                  // disable temporarily
-    SetTXIQDeinterleaved(false);                          // not interleaved (at least for now!)
-    ResetDUCMux();                                        // reset 64 to 48 mux
-    ResetDMAStreamFIFO(eTXDUCDMA);
-    EnableDUCMux(true);                                   // enable operation
-
+    printf("spinning up incoming DUC I/Q thread with port %d\n", ThreadData->Portid);
+                                                          //
   //
   // main processing loop
   //
@@ -1085,30 +788,8 @@ void *IncomingDUCIQ(void *arg)                          // listener thread
         }
         if(size == VDUCIQSIZE)
         {
-            printf("DUC I/Q packet received\n");
             NewMessageReceived = true;
-            Depth = ReadFIFOMonitorChannel(eTXDUCDMA, &FIFOOverflow);           // read the FIFO free locations
-            while (Depth < VMEMDUCWORDSPERFRAME)       // loop till space available
-            {
-                usleep(500);								                    // 0.5ms wait
-                Depth = ReadFIFOMonitorChannel(eTXDUCDMA, &FIFOOverflow);       // read the FIFO free locations
-            }
-            // copy data from UDP Buffer & DMA write it
-//            memcpy(IQBasePtr, UDPInBuffer + 4, VDMADUCTRANSFERSIZE);                // copy out I/Q samples
-            // need to swap I & Q samples on replay
-            SrcPtr = UDPInBuffer + 4;
-            DestPtr = IQBasePtr;
-            for (Cntr=0; Cntr < VIQSAMPLESPERFRAME; Cntr++)                     // samplecounter
-            {
-                *DestPtr++ = *(SrcPtr+3);                           // get I sample (3 bytes)
-                *DestPtr++ = *(SrcPtr+4);
-                *DestPtr++ = *(SrcPtr+5);
-                *DestPtr++ = *(SrcPtr+0);                           // get Q sample (3 bytes)
-                *DestPtr++ = *(SrcPtr+1);
-                *DestPtr++ = *(SrcPtr+2);
-                SrcPtr += 6;                                        // point at next source sample
-            }
-            DMAWriteToFPGA(DMAWritefile_fd, IQBasePtr, VDMADUCTRANSFERSIZE, VADDRDUCSTREAMWRITE);
+            saturn_handle_duc_iq(true, UDPInBuffer);
         }
     }
 //
@@ -1119,18 +800,6 @@ void *IncomingDUCIQ(void *arg)                          // listener thread
     ThreadData->Active = false;                   // indicate it is closed
     return NULL;
 }
-
-
-//
-// interface calls to get commands from PC settings
-// sample rate, DDC enabled and interleaved are all signalled through the socket 
-// data structure
-//
-// the meanings are:
-// enabled - the DDC sends data in its own right
-// interleaved - can be set for "even" DDCs; the next higher odd DDC also has its data routed
-// through here. That DDC is NOT enabled. 
-//
 
 
 //

@@ -178,25 +178,4 @@ void *IncomingSpkrAudio(void *arg);             // listener thread
 // END InSpkrAudio.h
 
 
-// START OutMicAudio.h
-#define VMICPACKETSIZE 132              // microphone packet
-
-
-//
-// protocol 2 handler for outgoing microphone audio data Packet from SDR
-//
-void *OutgoingMicSamples(void *arg);
-// END OutMicAudio.h
-
-
-// START OutHighPriority.h
-#define VHIGHPRIOTIYFROMSDRSIZE 60      // high priority packet from SDR
-
-
-//
-// protocol 2 handler for outgoing high priority data Packet from SDR
-//
-void *OutgoingHighPriority(void *arg);
-// END OutHighPriority.h
-
 #endif

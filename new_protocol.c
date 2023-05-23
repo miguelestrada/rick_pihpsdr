@@ -651,7 +651,7 @@ static void new_protocol_general() {
 
   if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-    saturn_handle_general_packet(general_buffer);
+    saturn_handle_general_packet(false, general_buffer);
 #endif
   } else {
     if((rc=sendto(data_socket,general_buffer,sizeof(general_buffer),0,(struct sockaddr*)&base_addr,base_addr_length))<0) {
@@ -1179,7 +1179,7 @@ static void new_protocol_high_priority() {
 //g_print("new_protocol_high_priority: %s:%d\n",inet_ntoa(high_priority_addr.sin_addr),ntohs(high_priority_addr.sin_port));
     if (device == NEW_DEVICE_SATURN) {
 #ifdef SATURN
-      saturn_handle_high_priority(high_priority_buffer_to_radio);
+      saturn_handle_high_priority(false, high_priority_buffer_to_radio);
 #endif
     } else {
       int rc;
@@ -1275,7 +1275,7 @@ static void new_protocol_transmit_specific() {
 
     if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-      saturn_handle_duc_specific(transmit_specific_buffer);
+      saturn_handle_duc_specific(false, transmit_specific_buffer);
 #endif
     } else {
     if((rc=sendto(data_socket,transmit_specific_buffer,sizeof(transmit_specific_buffer),0,(struct sockaddr*)&transmitter_addr,transmitter_addr_length))<0) {
@@ -1389,7 +1389,7 @@ static void new_protocol_receive_specific() {
 
     if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-      saturn_handle_ddc_specific(receive_specific_buffer);
+      saturn_handle_ddc_specific(false, receive_specific_buffer);
 #endif
     } else {
     if((rc=sendto(data_socket,receive_specific_buffer,sizeof(receive_specific_buffer),0,(struct sockaddr*)&receiver_addr,receiver_addr_length))<0) {
@@ -2140,7 +2140,7 @@ void new_protocol_flush_iq_samples() {
   // send the buffer
   if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-    saturn_handle_duc_iq(iqbuffer);
+    saturn_handle_duc_iq(false, iqbuffer);
 #endif
   } else {
     if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
@@ -2169,7 +2169,7 @@ void new_protocol_iq_samples(int isample,int qsample) {
     // send the buffer
     if(device==NEW_DEVICE_SATURN) {
 #ifdef SATURN
-      saturn_handle_duc_iq(iqbuffer);
+      saturn_handle_duc_iq(false, iqbuffer);
 #endif
     } else {
     if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {

@@ -180,12 +180,6 @@ extern gboolean duplex;
 extern gboolean mute_rx_while_transmitting;
 extern gint rx_height;
 
-extern int lt2208Dither;
-extern int lt2208Random;
-extern int attenuation;
-extern unsigned long alex_rx_antenna;
-extern unsigned long alex_tx_antenna;
-extern unsigned long alex_attenuation;
 
 extern int cw_keys_reversed;
 extern int cw_keyer_speed;
@@ -219,7 +213,7 @@ extern unsigned int exciter_power;
 extern unsigned int temperature;
 extern unsigned int average_temperature;
 extern unsigned int n_temperature;
-extern unsigned int current;
+extern unsigned int pa_current;
 extern unsigned int average_current;
 extern unsigned int n_current;
 extern unsigned int tx_fifo_underrun;
@@ -286,9 +280,11 @@ extern double div_gain, div_phase;
 
 extern int can_transmit;
 
-extern int have_rx_gain;   // TRUE on HermesLite/RadioBerry
-extern int rx_gain_calibration;  // position of the RX gain slider that
-				 // corresponds to zero amplification/attenuation
+extern int have_rx_gain;         // programmable RX gain available
+extern int have_rx_att;          // step attenuator available -31 ... 0 dB
+extern int have_preamp;          // switchable preamp
+extern int have_alex_att;        // ALEX board does have 0/10/20/30 dB attenuator
+extern int rx_gain_calibration;  // used to calibrate the input signal
 
 extern double drive_max;
 
@@ -298,7 +294,7 @@ extern gint sequence_errors;
 extern GMutex property_mutex;
 
 #ifdef CLIENT_SERVER
-extern gboolean server;
+//extern gboolean server;
 #endif
 
 extern int hl2_audio_codec;
@@ -321,8 +317,6 @@ extern void frequency_changed(RECEIVER *rx);
 extern double getDrive(void);
 extern void setDrive(double d);
 extern void calcDriveLevel(void);
-extern double getTuneDrive(void);
-extern void setTuneDrive(double d);
 extern void calcTuneDriveLevel(void);
 extern void setSquelch(RECEIVER *rx);
 
@@ -353,4 +347,8 @@ extern int remote_start(void *data);
 
 extern int optimize_for_touchscreen;
 extern void my_combo_attach(GtkGrid *grid, GtkWidget *combo, int row, int col, int spanrow, int spancol);
+extern int max_band(void);
+extern void protocol_run();
+extern void protocol_stop();
+extern void protocol_restart();
 #endif

@@ -340,9 +340,6 @@ void schedule_transmit_specific() {
     new_protocol_transmit_specific();
 }
 
-void filter_board_changed() {
-    schedule_general();
-}
 
 void update_action_table() {
   //
@@ -466,10 +463,6 @@ void new_protocol_init(int pixels) {
     (void)sem_init(&command_response_sem_buffer, 0, 0); // check return value!
 #endif
     command_response_thread_id = g_thread_new( "command_response thread",command_response_thread, NULL);
-    if( ! command_response_thread_id ) {
-      g_print("g_thread_new failed on command_response_thread\n");
-      exit( -1 );
-    }
     g_print( "command_response_thread: id=%p\n",command_response_thread_id);
 #ifdef __APPLE__
     high_priority_sem_ready=apple_sem(0);
@@ -479,10 +472,6 @@ void new_protocol_init(int pixels) {
     (void)sem_init(&high_priority_sem_buffer, 0, 0); // check return value!
 #endif
     high_priority_thread_id = g_thread_new( "high_priority thread", high_priority_thread, NULL);
-    if( ! high_priority_thread_id ) {
-      g_print("g_thread_new failed on high_priority_thread\n");
-      exit( -1 );
-    }
     g_print( "high_priority_thread: id=%p\n",high_priority_thread_id);
 #ifdef __APPLE__
     mic_line_sem_ready=apple_sem(0);
@@ -492,10 +481,6 @@ void new_protocol_init(int pixels) {
     (void)sem_init(&mic_line_sem_buffer, 0, 0); // check return value!
 #endif
     mic_line_thread_id = g_thread_new( "mic_line thread", mic_line_thread, NULL);
-    if( ! mic_line_thread_id ) {
-      g_print("g_thread_new failed on mic_line_thread\n");
-      exit( -1 );
-    }
     g_print( "mic_line_thread: id=%p\n",mic_line_thread_id);
 
 //
@@ -595,11 +580,6 @@ g_print("new_protocol_init: data_socket %d bound to interface %s:%d\n",data_sock
       // is is set before starting the timer thread sending the HP packet.
       running=1;
       new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
-      if( ! new_protocol_thread_id )
-      {
-          g_print("g_thread_new failed on new_protocol_thread\n");
-          exit( -1 );
-      }
       g_print( "new_protocol_thread: id=%p\n",new_protocol_thread_id);
     }
 
@@ -677,7 +657,6 @@ static void new_protocol_high_priority() {
     long long HPFfreq;  // frequency determining the HPF filters
     long long LPFfreq;  // frequency determining the LPF filters
     unsigned long phase;
-    int ddc;
     int xmit, txvfo, txmode;
 
     if(data_socket==-1 && device != NEW_DEVICE_SATURN) {
@@ -766,7 +745,7 @@ static void new_protocol_high_priority() {
 	//
         // note that for HERMES, receiver[i] is associated with DDC(i) but beyond
         // (that is, ANGELIA, ORION, ORION2) receiver[i] is associated with DDC(i+2)
-        ddc=0;
+        int ddc=0;
         if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
             device == NEW_DEVICE_ORION2 || device == NEW_DEVICE_SATURN) ddc=2;
 
@@ -868,14 +847,9 @@ static void new_protocol_high_priority() {
     unsigned long alex0=0x00000000;
     unsigned  long alex1=0x00000000;
 
-    if (device != NEW_DEVICE_ORION2 && device != NEW_DEVICE_SATURN) {
+    if (have_alex_att) {
       //
       // ANAN7000 and 8000 do not have ALEX attenuators.
-      // Even worse, ALEX0(14) bit used to control these attenuators
-      // on ANAN-10/100/200 is now used differently.
-      //
-      // Note: ALEX attenuators are not much used anyway since we
-      //       have step attenuators on most boards.
       //
       switch (receiver[0]->alex_attenuation) {
 	case 0:
@@ -1295,7 +1269,6 @@ static void new_protocol_transmit_specific() {
 
 static void new_protocol_receive_specific() {
     int i;
-    int ddc;
     int rc;
     int xmit;
 
@@ -1314,7 +1287,7 @@ static void new_protocol_receive_specific() {
     for(i=0;i<receivers;i++) {
 	// note that for HERMES, receiver[i] is associated with DDC(i) but beyond
 	// (that is, ANGELIA, ORION, ORION2) receiver[i] is associated with DDC(i+2)
-        ddc=i;
+        int ddc=i;
         if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION ||
             device == NEW_DEVICE_ORION2|| device == NEW_DEVICE_SATURN) ddc=2+i;
         //
@@ -1411,11 +1384,6 @@ static void new_protocol_start() {
     new_protocol_transmit_specific();
     new_protocol_receive_specific();
     new_protocol_timer_thread_id = g_thread_new( "new protocol timer", new_protocol_timer_thread, NULL);
-    if( ! new_protocol_timer_thread_id )
-    {
-        g_print("g_thread_new failed on new_protocol_timer_thread\n");
-        exit( -1 );
-    }
     g_print( "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
 
 }
@@ -1720,6 +1688,7 @@ void saturn_post_iq_data(int ddc, mybuffer *buffer) {
 #endif
 }
 #endif
+
 static gpointer iq_thread(gpointer data) {
   int ddc=GPOINTER_TO_INT(data);
   long sequence;
@@ -1873,7 +1842,6 @@ static void process_div_iq_data(unsigned char*buffer) {
 }
 
 static void process_ps_iq_data(unsigned char *buffer) {
-  int bitspersample;     // used in debug code
   int samplesperframe;
   int b;
   int leftsample0;
@@ -1886,10 +1854,21 @@ static void process_ps_iq_data(unsigned char *buffer) {
   double rightsampledouble1;
 
 
-  bitspersample=((buffer[12]&0xFF)<<8)+(buffer[13]&0xFF); // used in debug code
   samplesperframe=((buffer[14]&0xFF)<<8)+(buffer[15]&0xFF);
 
-//g_print("process_ps_iq_data: bitspersample=%d samplesperframe=%d\n", bitspersample,samplesperframe);
+#ifdef P2IQDEBUG
+  long long timestamp=
+            ((long long)(buffer[4]&0xFF)<<56)
+           +((long long)(buffer[5]&0xFF)<<48)
+           +((long long)(buffer[6]&0xFF)<<40)
+           +((long long)(buffer[7]&0xFF)<<32)
+           +((long long)(buffer[8]&0xFF)<<24)
+           +((long long)(buffer[9]&0xFF)<<16)
+           +((long long)(buffer[10]&0xFF)<<8)
+           +((long long)(buffer[11]&0xFF)   );
+  int bitspersample=((buffer[12]&0xFF)<<8)+(buffer[13]&0xFF);
+  g_print("%s: rx=%d bitspersample=%d samplesperframe=%d\n",__FUNCTION__,rx->id, bitspersample,samplesperframe);
+#endif
   b=16;
   int i;
   for(i=0;i<samplesperframe;i+=2) {
@@ -1982,23 +1961,10 @@ static void process_high_priority() {
       CAT_cw_is_active=0;
       cw_key_hit=1;
     }
-#ifdef LOCALCW
     if (!cw_keyer_internal) {
       if (dash != previous_dash) keyer_event(0, dash);
       if (dot  != previous_dot ) keyer_event(1, dot );
     }
-#else
-    //
-    // Note that if an external keyer is connected to the "CW" jack of
-    // the ANAN-7000, it will report its state via the "dot" state
-    // so we can do CW directly. Only act on dot state changes so we
-    // do not intervene with CAT CW. Note it is assumed that the external
-    // keyer also takes care of PTT.
-    //
-    if (!cw_keyer_internal && dot != previous_dot) {
-      cw_key_down=dot ? 960000 : 0;
-    }
-#endif
 
     if(previous_ptt!=local_ptt) {
       g_idle_add(ext_mox_update,GINT_TO_POINTER(local_ptt));
@@ -2009,7 +1975,6 @@ static void process_mic_data(int bytes) {
   long sequence;
   int b;
   int i;
-  short sample;
   float fsample;
   unsigned char *buffer=mic_line_buffer->buffer;
 
@@ -2022,7 +1987,7 @@ static void process_mic_data(int bytes) {
   micsamples_sequence++;
   b=4;
   for(i=0;i<MIC_SAMPLES;i++) {
-    sample=(short)(buffer[b++]<<8);
+    short sample=(short)(buffer[b++]<<8);
     sample |= (short) (buffer[b++]&0xFF);
     //
     // If PTT comes from the radio, possibly use audio from BOTH sources
@@ -2039,7 +2004,6 @@ static void process_mic_data(int bytes) {
 }
 
 void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sample) {
-  int rc;
   int txmode=get_tx_mode();
 
   if (isTransmitting() && (txmode==modeCWU || txmode==modeCWL)) {
@@ -2069,11 +2033,13 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
         saturn_handle_speaker_audio(audiobuffer);
 #endif
       } else {
-      rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
-      if(rc!=sizeof(audiobuffer)) {
-        g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
+        int rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
+        if(rc!=sizeof(audiobuffer)) {
+          g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
         }
+#ifdef SATURN
       }
+#endif
       audioindex=4;
       audiosequence++;
     }
@@ -2083,7 +2049,6 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
 
 
 void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right_audio_sample) {
-  int rc;
   int txmode=get_tx_mode();
   //
   // Only process samples if NOT transmitting in CW
@@ -2112,11 +2077,13 @@ void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right
       saturn_handle_speaker_audio(audiobuffer);
 #endif
     } else {
-    rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
-    if(rc!=sizeof(audiobuffer)) {
-      g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
+      int rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
+      if(rc!=sizeof(audiobuffer)) {
+        g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
       }
+#ifdef SATURN
     }
+#endif
     audioindex=4;
     audiosequence++;
   }
@@ -2147,7 +2114,9 @@ void new_protocol_flush_iq_samples() {
       g_print("sendto socket failed for iq\n");
       exit(1);
     }
+#ifdef SATURN
   }
+#endif
   iqindex=4;
   tx_iq_sequence++;
 }
@@ -2172,9 +2141,9 @@ void new_protocol_iq_samples(int isample,int qsample) {
       saturn_handle_duc_iq(false, iqbuffer);
 #endif
     } else {
-    if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
-      g_print("sendto socket failed for iq\n");
-      exit(1);
+      if(sendto(data_socket,iqbuffer,sizeof(iqbuffer),0,(struct sockaddr*)&iq_addr,iq_addr_length)<0) {
+        g_print("sendto socket failed for iq\n");
+        exit(1);
       }
     }
     iqindex=4;

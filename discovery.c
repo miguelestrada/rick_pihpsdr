@@ -59,9 +59,7 @@
 static GtkWidget *discovery_dialog;
 static DISCOVERED *d;
 
-#ifdef STEMLAB_DISCOVERY
 static GtkWidget *apps_combobox[MAX_DEVICES];
-#endif
 
 GtkWidget *tcpaddr;
 #define IPADDR_LEN 20
@@ -158,7 +156,7 @@ static gboolean radio_ip_cb (GtkWidget *widget, GdkEventButton *event, gpointer 
     ipaddr_radio[IPADDR_LEN-1]=0;
 
     // The new value is written upon each key stroke, so what?
-    // fprintf(stderr,"New TCP addr = %s.\n", ipaddr_radio);
+    // g_print("New TCP addr = %s.\n", ipaddr_radio);
     FILE *fp = fopen("ip.addr", "w");
     if (fp) {
 	fprintf(fp,"%s\n",ipaddr_radio);
@@ -224,7 +222,7 @@ void discovery() {
 //
 // first: look on USB for an Ozy
 //
-  fprintf(stderr,"looking for USB based OZY devices\n");
+  g_print("looking for USB based OZY devices\n");
 
   if (ozy_discover() != 0)
   {
@@ -244,7 +242,7 @@ void discovery() {
     discovered[devices].use_tcp=0;
     discovered[devices].use_routing=0;
     discovered[devices].supported_receivers=2;
-    fprintf(stderr,"discovery: found USB OZY device min=%f max=%f\n",
+    g_print("discovery: found USB OZY device min=%f max=%f\n",
                             discovered[devices].frequency_min,
                             discovered[devices].frequency_max);
 
@@ -254,16 +252,12 @@ void discovery() {
 
 #ifdef SATURN
 #include "saturnmain.h"
-  fprintf(stderr,"looking for /dev/xdma* based Saturn devices\n");
+  g_print("looking for /dev/xdma* based Saturn devices\n");
   saturn_discovery();
 #endif
 #ifdef STEMLAB_DISCOVERY
   if(enable_stemlab && !discover_only_stemlab) {
-#ifdef NO_AVAHI
     status_text("Looking for STEMlab WEB apps");
-#else
-    status_text("STEMlab (Avahi) ... Discovering Devices");
-#endif
     stemlab_discovery();
   }
 #endif
@@ -290,7 +284,7 @@ void discovery() {
 
   status_text("Discovery");
 
-    fprintf(stderr,"discovery: found %d devices\n", devices);
+    g_print("discovery: found %d devices\n", devices);
     gdk_window_set_cursor(gtk_widget_get_window(top_window),gdk_cursor_new(GDK_ARROW));
 
     discovery_dialog = gtk_dialog_new();
@@ -318,7 +312,7 @@ void discovery() {
       char text[256];
       for(row=0;row<devices;row++) {
         d=&discovered[row];
-fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
+g_print("%p Protocol=%d name=%s\n",d,d->protocol,d->name);
         sprintf(version,"v%d.%d",
                           d->software_version/10,
                           d->software_version%10);
@@ -328,13 +322,11 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
 #ifdef SATURN
             if(d->device==NEW_DEVICE_SATURN) {
               sprintf(text,"%s (Protocol 2 SATURN SW:%s, FPGA:%08x) on %s",d->name,version,d->fpga_version,"/dev/xdma");
-            } else {
+            } else
 #endif
-#ifdef USBOZY
             if(d->device==DEVICE_OZY) {
               sprintf(text,"%s (%s) on USB /dev/ozy", d->name, d->protocol==ORIGINAL_PROTOCOL?"Protocol 1":"Protocol 2");
             } else {
-#endif
               sprintf(text,"%s (%s %s) %s (%02X:%02X:%02X:%02X:%02X:%02X) on %s: ",
                             d->name,
                             d->protocol==ORIGINAL_PROTOCOL?"Protocol 1":"Protocol 2",
@@ -347,31 +339,16 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
                             d->info.network.mac_address[4],
                             d->info.network.mac_address[5],
                             d->info.network.interface_name);
-#if defined (USBOZY) || defined (SATURN)
             }
-#endif
             break;
-#ifdef SOAPYSDR
           case SOAPYSDR_PROTOCOL:
+#ifdef SOAPYSDR
             sprintf(text,"%s (Protocol SOAPY_SDR %s) on %s",d->name,d->info.soapy.version,d->info.soapy.address);
+#endif
             break;
 
-#endif
-#ifdef STEMLAB_DISCOVERY
           case STEMLAB_PROTOCOL:
-#ifdef NO_AVAHI
             sprintf(text,"Choose RedPitaya App from %s and re-discover: ",inet_ntoa(d->info.network.address.sin_addr));
-#else
-            sprintf(text, "STEMlab (%02X:%02X:%02X:%02X:%02X:%02X) on %s",
-                           d->info.network.mac_address[0],
-                           d->info.network.mac_address[1],
-                           d->info.network.mac_address[2],
-                           d->info.network.mac_address[3],
-                           d->info.network.mac_address[4],
-                           d->info.network.mac_address[5],
-                           d->info.network.interface_name);
-#endif
-#endif
         }
 
         GtkWidget *label=gtk_label_new(text);
@@ -392,9 +369,7 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
           gtk_widget_set_sensitive(start_button, FALSE);
         }
 
-#ifdef SOAPYSDR
         if(d->device!=SOAPYSDR_USB_DEVICE)
-#endif
 	{
 	  int can_connect = 0;
           //
@@ -415,7 +390,6 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
           }
         }
 
-#ifdef STEMLAB_DISCOVERY
         if (d->protocol == STEMLAB_PROTOCOL) {
           if (d->software_version == 0) {
             gtk_button_set_label(GTK_BUTTON(start_button), "Not installed");
@@ -454,7 +428,6 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
             gtk_widget_show(apps_combobox[row]);
           }
         }
-#endif
 
       }
     }
@@ -503,7 +476,6 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(gpio),NULL,"Controller2 V1");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(gpio),NULL,"Controller2 V2");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(gpio),NULL,"G2 Front Panel");
-    //gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(gpio),NULL,"Controller I2C");
     my_combo_attach(GTK_GRID(grid),gpio,0,row,1,1);
 
     gtk_combo_box_set_active(GTK_COMBO_BOX(gpio),controller);
@@ -541,7 +513,7 @@ fprintf(stderr,"%p Protocol=%d name=%s\n",d,d->protocol,d->name);
 
     gtk_container_add (GTK_CONTAINER (content), grid);
     gtk_widget_show_all(discovery_dialog);
-fprintf(stderr,"showing device dialog\n");
+g_print("showing device dialog\n");
     //
     // This call records the colour of the label and stores it.
     // Subsequent calls to set_button_text_color() with color == "default"

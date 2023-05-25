@@ -334,8 +334,8 @@ void* saturn_server(void *arg)
 // instead copy socket settings from DUCSPECIFIC socket:
 //
   SocketData[VPORTMICAUDIO].Socketid = SocketData[VPORTDUCSPECIFIC].Socketid;
-#if 0
   memcpy(&SocketData[VPORTMICAUDIO].addr_cmddata, &SocketData[VPORTDUCSPECIFIC].addr_cmddata, sizeof(struct sockaddr_in));
+#if 0
   if(pthread_create(&MicThread, NULL, OutgoingMicSamples, (void*)&SocketData[VPORTMICAUDIO]) < 0)
   {
     perror("pthread_create Mic");
@@ -350,8 +350,8 @@ void* saturn_server(void *arg)
 // instead copy socket settings from VPORTDDCSPECIFIC socket:
 //
   SocketData[VPORTHIGHPRIORITYFROMSDR].Socketid = SocketData[VPORTDDCSPECIFIC].Socketid;
-#if 0
   memcpy(&SocketData[VPORTHIGHPRIORITYFROMSDR].addr_cmddata, &SocketData[VPORTDDCSPECIFIC].addr_cmddata, sizeof(struct sockaddr_in));
+#if 0
   if(pthread_create(&HighPriorityFromSDRThread, NULL, OutgoingHighPriority, (void*)&SocketData[VPORTHIGHPRIORITYFROMSDR]) < 0)
   {
     perror("pthread_create outgoing hi priority");

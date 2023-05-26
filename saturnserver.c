@@ -194,7 +194,12 @@ void* CheckForActivity(void *arg)
       ReplyAddressSet = false;
       StartBitReceived = false;
       if(PreviouslyActiveState)
+      {
+        for(int i=4; i<VNUMDDC; i++)               // disable upper bank of DDCs
+          SetP2SampleRate(i, false, 48, false);
+        WriteP2DDCRateRegister();
         printf("Reverted to Inactive State after no activity\n");
+      }
     }
     NewMessageReceived = false;
   }

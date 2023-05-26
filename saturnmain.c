@@ -1134,6 +1134,9 @@ void saturn_handle_high_priority(bool FromNetwork, unsigned char *UDPInBuffer)
       else
       {
         ServerActive = false;                                       // set state of whole app
+        for(int i=4; i<VNUMDDC; i++)               // disable upper bank of DDCs
+          SetP2SampleRate(i, false, 48, false);
+        WriteP2DDCRateRegister();
         printf("Server set to inactive by client app\n");
         StartBitReceived = false;
       }

@@ -992,14 +992,7 @@ g_print("%s: id=%d buffer_size=%d fft_size=%d pixels=%d fps=%d\n",__FUNCTION__,i
   switch(id) {
     case 0:
       rx->adc=0;
-#ifdef SATURN //RRK still need?
-      rx->ddc=2;
       break;
-    case 1:
-      rx->ddc=3;
-#else
-      break;
-#endif
     default:
           switch(device) {
             case DEVICE_METIS:

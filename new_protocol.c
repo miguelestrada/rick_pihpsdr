@@ -2037,9 +2037,7 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
         if(rc!=sizeof(audiobuffer)) {
           g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
         }
-#ifdef SATURN
       }
-#endif
       audioindex=4;
       audiosequence++;
     }
@@ -2081,9 +2079,7 @@ void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right
       if(rc!=sizeof(audiobuffer)) {
         g_print("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
       }
-#ifdef SATURN
     }
-#endif
     audioindex=4;
     audiosequence++;
   }
@@ -2114,9 +2110,7 @@ void new_protocol_flush_iq_samples() {
       g_print("sendto socket failed for iq\n");
       exit(1);
     }
-#ifdef SATURN
   }
-#endif
   iqindex=4;
   tx_iq_sequence++;
 }

@@ -239,7 +239,7 @@ void saturn_register_init()
     SetTXEnable(true);
     EnableAlexManualFilterSelect(true);
     SetBalancedMicInput(false);
-
+//RRK disable DDCs here?
 }
 
 void saturn_discovery()
@@ -918,22 +918,18 @@ static gpointer saturn_rx_thread(gpointer arg)
                     memcpy(mybuf->buffer + 16, IQReadPtr[DDC], VIQBYTESPERFRAME);
                     IQReadPtr[DDC] += VIQBYTESPERFRAME;
 
-                    if (DDC < 4)
-                    {
-                      saturn_post_iq_data(DDC, mybuf);
-                    }
-                    else
+                    if (DDC < 6)
                     {
                       if (ServerActive)
                       {
                         iovecinst[DDC].iov_base = mybuf->buffer;
                         memcpy(&DestAddr[DDC], &reply_addr, sizeof(struct sockaddr_in));           // local copy of PC destination address (reply_addr is global)
-                        Error = sendmsg(SocketData[VPORTDDCIQ0+(DDC-4)].Socketid, &datagram[DDC], 0);
+                        Error = sendmsg(SocketData[VPORTDDCIQ0+DDC].Socketid, &datagram[DDC], 0);
 
                         if (Error == -1)
                         {
                             printf("Send Error, DDC=%d, errno=%d, socket id = %d\n", DDC,
-                              errno, SocketData[VPORTDDCIQ0+(DDC-4)].Socketid);
+                              errno, SocketData[VPORTDDCIQ0+DDC].Socketid);
                             exit( -1 );
                         }
                       }
@@ -941,6 +937,10 @@ static gpointer saturn_rx_thread(gpointer arg)
 		        SequenceCounter[DDC] = 0;
 
                       mybuf->free = 1;
+                    }
+                    else
+                    {
+                      saturn_post_iq_data(DDC-6, mybuf);
                     }
                 }
                 //
@@ -1103,7 +1103,7 @@ void saturn_handle_high_priority(bool FromNetwork, unsigned char *UDPInBuffer)
     uint16_t Word;
     int i;                                                // counter
     int DDCLoop = (FromNetwork)?6:4;
-    int DDCOffset = (FromNetwork)?4:0;
+    int DDCOffset = (FromNetwork)?0:6;
 
     //printf("high priority %sbuffer received\n", (FromNetwork)?"network ":"");
 
@@ -1253,7 +1253,7 @@ void saturn_handle_ddc_specific(bool FromNetwork, unsigned char *UDPInBuffer)
     int i;                                                // counter
     EADCSelect ADC = eADC1;                               // ADC to use for a DDC
     int DDCLoop = (FromNetwork)?6:4;
-    int DDCOffset = (FromNetwork)?4:0;
+    int DDCOffset = (FromNetwork)?0:6;
 
     //printf("DDC specific %sbuffer received\n", (FromNetwork)?"network ":"");
     if(!FromNetwork) //RRK

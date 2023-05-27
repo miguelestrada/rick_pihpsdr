@@ -1530,6 +1530,7 @@ g_print("new_protocol_thread\n");
 //g_print("iq packet from port=%d ddc=%d\n",sourceport,ddc);
               if(ddc>=MAX_DDC)  {
                 g_print("unexpected iq data from ddc %d\n",ddc);
+                iq_buffer[ddc]->free=1;
               } else {
 #ifdef __APPLE__
                 sem_wait(iq_sem_ready[ddc]);

@@ -593,6 +593,7 @@ if(!radio_is_remote) {
             default:
               pk = 0.2899;
               break;
+          }
         case ORIGINAL_PROTOCOL:
           switch (device) {
             case DEVICE_HERMES_LITE2:

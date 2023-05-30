@@ -586,11 +586,13 @@ if(!radio_is_remote) {
       receiver[PS_RX_FEEDBACK]=create_pure_signal_receiver(PS_RX_FEEDBACK, buffer_size,protocol==ORIGINAL_PROTOCOL?active_receiver->sample_rate:192000,display_width);
       switch (protocol) {
         case NEW_PROTOCOL:
-          if(device==NEW_DEVICE_SATURN)
-            pk = 0.6306;
-	  else
-            pk = 0.2899;
-          break;
+          switch (device) {
+            case NEW_DEVICE_SATURN:
+              pk = 0.6121;
+              break;
+            default:
+              pk = 0.2899;
+              break;
         case ORIGINAL_PROTOCOL:
           switch (device) {
             case DEVICE_HERMES_LITE2:

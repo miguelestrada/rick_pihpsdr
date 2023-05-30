@@ -10,7 +10,7 @@
 //
 // licenced under GNU GPL3
 //
-// saturnmain.c:
+// saturnmain.c: based off p2app client app software version = 11
 //
 // Saturn interface to PiHPSDR
 //

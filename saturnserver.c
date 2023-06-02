@@ -246,7 +246,7 @@ void* saturn_server(void *arg)
     0,0,0,0,                                      // sequence bytes
     2,                                            // 2 if not active; 3 if active
     0,0,0,0,0,0,                                  // SDR (raspberry i) MAC address
-    5,                                            // board type. changed from "hermes" to "orion mk2"
+    10,                                           // board type. Saturn
     38,                                           // protocol version 3.8
     20,                                           // this SDR firmware version. >17 to enable QSK
     0,0,0,0,0,0,                                  // Mercury, Metis, Penny version numbers

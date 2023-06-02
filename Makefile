@@ -20,7 +20,7 @@ GPIO_INCLUDE=GPIO
 # uncomment the line below to include MIDI support (needs MIDI support)
 MIDI_INCLUDE=MIDI
 
-# uncomment the line below to include SATURN support
+# uncomment the line below to include SATURN native xdma support
 SATURN_INCLUDE=SATURN
 
 # uncomment the line below to include ANDROMEDA support

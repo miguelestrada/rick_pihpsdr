@@ -499,7 +499,7 @@ void new_protocol_init(int pixels) {
       iq_thread_id[i] = g_thread_new( "iq thread", iq_thread, GINT_TO_POINTER(i));
     }
 
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_init();
       iqindex=4;
@@ -629,7 +629,7 @@ static void new_protocol_general() {
 //g_print("Alex Enable=%02X\n",general_buffer[59]);
 //g_print("new_protocol_general: %s:%d\n",inet_ntoa(base_addr.sin_addr),ntohs(base_addr.sin_port));
 
-  if(device==NEW_DEVICE_SATURN) {
+  if(have_saturn_xdma) {
 #ifdef SATURN
     saturn_handle_general_packet(false, general_buffer);
 #endif
@@ -659,7 +659,7 @@ static void new_protocol_high_priority() {
     unsigned long phase;
     int xmit, txvfo, txmode;
 
-    if(data_socket==-1 && device != NEW_DEVICE_SATURN) {
+    if(data_socket==-1 && !have_saturn_xdma) {
       return;
     }
 
@@ -1151,7 +1151,7 @@ static void new_protocol_high_priority() {
 //  Voila mes amis. Envoyons les 1444 octets "high priority" au radio
 //
 //g_print("new_protocol_high_priority: %s:%d\n",inet_ntoa(high_priority_addr.sin_addr),ntohs(high_priority_addr.sin_port));
-    if (device == NEW_DEVICE_SATURN) {
+    if (have_saturn_xdma) {
 #ifdef SATURN
       saturn_handle_high_priority(false, high_priority_buffer_to_radio);
 #endif
@@ -1247,7 +1247,7 @@ static void new_protocol_transmit_specific() {
 
 //g_print("new_protocol_transmit_specific: %s:%d\n",inet_ntoa(transmitter_addr.sin_addr),ntohs(transmitter_addr.sin_port));
 
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_handle_duc_specific(false, transmit_specific_buffer);
 #endif
@@ -1360,7 +1360,7 @@ static void new_protocol_receive_specific() {
 
 //g_print("new_protocol_receive_specific: %s:%d enable=%02X\n",inet_ntoa(receiver_addr.sin_addr),ntohs(receiver_addr.sin_port),receive_specific_buffer[7]);
 
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_handle_ddc_specific(false, receive_specific_buffer);
 #endif
@@ -1392,7 +1392,7 @@ void new_protocol_stop() {
     running=0;
     new_protocol_high_priority();
     usleep(100000); // 100 ms
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_exit();
 #endif
@@ -1414,7 +1414,7 @@ void new_protocol_menu_stop() {
   // the data socket is drained but kept open
   //
   running=0;
-  if(device==NEW_DEVICE_SATURN) {
+  if(have_saturn_xdma) {
     g_thread_join(new_protocol_timer_thread_id);
     new_protocol_high_priority();
     usleep(200000); // 200 ms
@@ -1466,7 +1466,7 @@ void new_protocol_menu_start() {
   // set it to 1 here as well such that we are *absolutely* sure
   // is is set before starting the timer thread sending the HP packet.
   running=1;
-  if(device!=NEW_DEVICE_SATURN)
+  if(!have_saturn_xdma)
     new_protocol_thread_id = g_thread_new( "new protocol", new_protocol_thread, NULL);
 
   // start the protocol
@@ -2029,7 +2029,7 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
 
       // send the buffer
 
-      if(device==NEW_DEVICE_SATURN) {
+      if(have_saturn_xdma) {
 #ifdef SATURN
         saturn_handle_speaker_audio(audiobuffer);
 #endif
@@ -2071,7 +2071,7 @@ void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right
 
     // send the buffer
 
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_handle_speaker_audio(audiobuffer);
 #endif
@@ -2102,7 +2102,7 @@ void new_protocol_flush_iq_samples() {
   iqbuffer[3]=tx_iq_sequence;
 
   // send the buffer
-  if(device==NEW_DEVICE_SATURN) {
+  if(have_saturn_xdma) {
 #ifdef SATURN
     saturn_handle_duc_iq(false, iqbuffer);
 #endif
@@ -2131,7 +2131,7 @@ void new_protocol_iq_samples(int isample,int qsample) {
     iqbuffer[3]=tx_iq_sequence;
 
     // send the buffer
-    if(device==NEW_DEVICE_SATURN) {
+    if(have_saturn_xdma) {
 #ifdef SATURN
       saturn_handle_duc_iq(false, iqbuffer);
 #endif

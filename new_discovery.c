@@ -322,7 +322,7 @@ gpointer new_discover_receive_thread(gpointer data) {
                             frequency_max=61440000.0;
                             break;
 			case NEW_DEVICE_SATURN:
-                            strcpy(discovered[devices].name,"Saturn");
+                            strcpy(discovered[devices].name,"saturn");
                             frequency_min=0.0;
                             frequency_max=61440000.0;
                             break;

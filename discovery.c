@@ -252,7 +252,7 @@ void discovery() {
 
 #ifdef SATURN
 #include "saturnmain.h"
-  g_print("looking for /dev/xdma* based Saturn devices\n");
+  g_print("looking for /dev/xdma* based saturn devices\n");
   saturn_discovery();
 #endif
 #ifdef STEMLAB_DISCOVERY
@@ -319,11 +319,6 @@ g_print("%p Protocol=%d name=%s\n",d,d->protocol,d->name);
         switch(d->protocol) {
           case ORIGINAL_PROTOCOL:
           case NEW_PROTOCOL:
-#ifdef SATURN
-            if(d->device==NEW_DEVICE_SATURN) {
-              sprintf(text,"%s (Protocol 2 SATURN SW:%s, FPGA:%08x) on %s",d->name,version,d->fpga_version,"/dev/xdma");
-            } else
-#endif
             if(d->device==DEVICE_OZY) {
               sprintf(text,"%s (%s) on USB /dev/ozy", d->name, d->protocol==ORIGINAL_PROTOCOL?"Protocol 1":"Protocol 2");
             } else {
@@ -362,7 +357,6 @@ g_print("%p Protocol=%d name=%s\n",d,d->protocol,d->name);
         gtk_widget_show(start_button);
         gtk_grid_attach(GTK_GRID(grid),start_button,3,row,1,1);
         g_signal_connect(start_button,"button-press-event",G_CALLBACK(start_cb),(gpointer)d);
-
         // if not available then cannot start it
         if(d->status!=STATE_AVAILABLE) {
           gtk_button_set_label(GTK_BUTTON(start_button),"In Use");

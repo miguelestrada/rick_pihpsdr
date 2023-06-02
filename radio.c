@@ -285,6 +285,7 @@ int have_rx_gain=0;
 int have_rx_att=0;
 int have_alex_att=0;
 int have_preamp=0;
+int have_saturn_xdma=0;
 int rx_gain_calibration=0;
 
 
@@ -703,6 +704,10 @@ void start_radio() {
   protocol=radio->protocol;
   device=radio->device;
 
+  // Keep track of whether this saturn is connected via network or xdma
+  if (device == NEW_DEVICE_SATURN && (strcmp(radio->info.network.interface_name,"XDMA")==0))
+    have_saturn_xdma=1;
+
   if (device == DEVICE_METIS || device == DEVICE_OZY || device == NEW_DEVICE_ATLAS) {
     //
     // by default, assume there is a penelope board (no PennyLane)
@@ -931,11 +936,6 @@ void start_radio() {
     case NEW_PROTOCOL:
       if(device==DEVICE_OZY) {
         sprintf(text,"%s (%s) on USB /dev/ozy\n", radio->name, p);
-      } else if(device==NEW_DEVICE_SATURN) {
-        sprintf(text,"Starting %s (%s %s)",
-              radio->name,
-              "SATURN",
-              version);
       } else {
         sprintf(text,"Starting %s (%s %s)",
                       radio->name,
@@ -959,7 +959,7 @@ void start_radio() {
   switch (protocol) {
     case ORIGINAL_PROTOCOL:
     case NEW_PROTOCOL:
-      if(device==NEW_DEVICE_SATURN) {
+      if(have_saturn_xdma) {
         sprintf(text,"piHPSDR: %s (%s %s) on %s",
                    radio->name,
                    p,
@@ -993,10 +993,14 @@ void start_radio() {
     case DEVICE_OZY:
       sprintf(property_path,"ozy.props");
       break;
-    case NEW_DEVICE_SATURN:
     case SOAPYSDR_USB_DEVICE:
       sprintf(property_path,"%s.props",radio->name);
       break;
+    case NEW_DEVICE_SATURN:
+      if(have_saturn_xdma) {
+        sprintf(property_path,"%s.props",radio->name);
+        break;
+      } // else fall through since using network
     default:
       sprintf(property_path,"%02X-%02X-%02X-%02X-%02X-%02X.props",
               radio->info.network.mac_address[0],
